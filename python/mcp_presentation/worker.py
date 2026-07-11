@@ -1,4 +1,4 @@
-"""Background build worker: claim_next → engine build / deploy → status."""
+"""Background build worker: claim_next → build / deploy → status."""
 
 from __future__ import annotations
 
@@ -10,14 +10,21 @@ from typing import cast
 
 from mcp_presentation._tasks import TaskStore
 from mcp_presentation.deploy import deploy_local
-from mcp_presentation.engines import ContainerRunner, run_target
-from mcp_presentation.ir_compile import load_ir
-from mcp_presentation.settings import BUILD_TARGETS
+from mcp_presentation.engines import ContainerRunner, run_web_target
+from mcp_presentation.engines.runtime import as_run_result, require_exit_ok
+from mcp_presentation.ir_compile import ensure_latex_source, load_ir
+from mcp_presentation.settings import (
+    BUILD_TARGETS,
+    CONTAINER_WORK,
+    LATEX_IMAGE,
+    workspace_bind,
+)
 from mcp_presentation.types import TaskRow
 
 logger = logging.getLogger(__name__)
 
 POLL_SECONDS = float(os.environ.get("MCP_WORKER_POLL_SECONDS", "1.0"))
+WEB_TARGETS = frozenset({"web", "web-pdf", "slide-image"})
 
 
 def _as_task(row: object) -> TaskRow:
@@ -25,7 +32,7 @@ def _as_task(row: object) -> TaskRow:
 
 
 class BuildWorker:
-    """Poll TaskStore, call engine build functions or local deploy."""
+    """Poll TaskStore, run builds or local deploy, write status back."""
 
     def __init__(
         self,
@@ -48,7 +55,9 @@ class BuildWorker:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="mcp-build-worker", daemon=True)
+        self._thread = threading.Thread(
+            target=self._loop, name="mcp-build-worker", daemon=True
+        )
         self._thread.start()
 
     def stop(self) -> None:
@@ -100,8 +109,14 @@ class BuildWorker:
         try:
             if (host_ws / "presentation.ir.json").is_file():
                 load_ir(host_ws)
-            self._tasks.update(tid, logs=f"engine build target={target}\n")
-            artifact = run_target(host_ws, target, self._runner)
+            self._tasks.update(tid, logs=f"build target={target}\n")
+            if target in WEB_TARGETS:
+                artifact = run_web_target(host_ws, target, self._runner)
+            elif target == "pdf":
+                artifact = self._build_pdf(host_ws)
+            else:
+                msg = f"unsupported target: {target}"
+                raise ValueError(msg)
         except Exception as exc:
             self._tasks.update(tid, status="error", error=str(exc), logs=str(exc))
             return
@@ -111,6 +126,27 @@ class BuildWorker:
             status="done",
             artifact=str(artifact),
         )
+
+    def _build_pdf(self, host_ws: Path) -> Path:
+        """LaTeX PDF path stays in the worker (no separate latex engine module)."""
+        host_ws.mkdir(parents=True, exist_ok=True)
+        src = ensure_latex_source(host_ws)
+        if src is None:
+            msg = "no LaTeX source or presentation.ir.json in workspace"
+            raise ValueError(msg)
+        raw = self._runner.run(
+            LATEX_IMAGE,
+            ["pdf"],
+            binds=[workspace_bind(host_ws)],
+            workdir=CONTAINER_WORK,
+            auto_remove=True,
+        )
+        require_exit_ok(as_run_result(raw), label="pdf")
+        artifact = host_ws / "out" / "main.pdf"
+        if not artifact.is_file():
+            msg = f"missing artifact {artifact}"
+            raise RuntimeError(msg)
+        return artifact
 
     def _run_deploy(self, tid: str, task: TaskRow, host_ws: Path) -> None:
         artifact_s = task.get("artifact")

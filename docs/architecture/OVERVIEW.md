@@ -74,13 +74,16 @@ See [`infra/README.md`](../infra/README.md).
 
 ## Build engines (library)
 
-| Engine | Functions | Image |
-|--------|-----------|-------|
-| latex | `build_pdf` | `latex-builder` |
-| web | `build_web`, `build_web_pdf`, `build_slide_images` | `web-builder` |
+Web only:
 
-Worker calls `engines.run_target(...)`. MCP `get_slide_image` only reads
-`out/slides/slide.NNN.png` after `build_presentation(..., "slide-image")`.
+| Function | Target | Artifact |
+|----------|--------|----------|
+| `build_web` | `web` | `dist/` |
+| `build_web_pdf` | `web-pdf` | `out/web.pdf` |
+| `build_slide_images` | `slide-image` | `out/slides/` |
+
+Worker calls `engines.run_web_target(...)` for web targets. PDF stays in the worker.
+MCP `get_slide_image` only reads `out/slides/slide.NNN.png` after a slide-image build.
 
 ## Build worker
 
@@ -88,7 +91,7 @@ After enqueue, `wake_worker` starts a daemon that:
 
 1. `claim_next`
 2. validates IR (if present)
-3. calls engine `run_target` (latex/web) **or** local deploy
+3. web → `run_web_target` / pdf → worker latex path / deploy → local copy
 4. writes `done` / `error`
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).
