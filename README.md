@@ -2,20 +2,36 @@
 
 MCP-сервер для сборки презентаций (**PDF** / **web**) с task-based async pipeline.
 
-## Стек
+## Пакеты
 
-- **Python 3.14** + **FastMCP** — MCP tools
-- **Rust / PyO3** (`rusqlite`) — TaskStore, embedded SQLite (`state/tasks.db`)
-- **maturin** — сборка native extension
+| Пакет | Что хранит | PyO3 |
+|-------|------------|------|
+| **`mcp-presentation`** (этот репо root) | задачи сборки → `state/tasks.db` | `mcp_presentation._tasks` |
+| **`mcp-state`** ([`packages/mcp-state`](packages/mcp-state)) | сессии + workspaces → `state/sessions.db` | `mcp_state._native` |
+
+Стек: **Python 3.14 · FastMCP · Rust/PyO3 · rusqlite · maturin**.
 
 ## ADR
 
-Архитектурные решения фиксируются в **[`docs/adr/`](docs/adr/README.md)**.
+→ [`docs/adr/`](docs/adr/README.md)
+
+## Dev
+
+```bash
+uv venv -p 3.14 .venv && source .venv/bin/activate
+# отдельный пакет state
+(cd packages/mcp-state && maturin develop)
+# tasks + MCP server
+maturin develop
+uv pip install -e packages/mcp-state
+pytest -q packages/mcp-state/tests tests
+```
 
 ## Состояние на диске
 
 ```text
-state/tasks.db           # SQLite: только через Rust TaskStore
-projects/<id>.git/       # git bare — истина
+state/tasks.db           # mcp-presentation TaskStore
+state/sessions.db        # mcp-state StateStore
+projects/<id>.git/       # git bare
 workspaces/<ws_id>/      # git worktree checkout
 ```
