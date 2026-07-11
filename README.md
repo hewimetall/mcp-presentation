@@ -24,11 +24,25 @@ Docker: DooD socket через bollard — **без `docker` CLI** (ADR-0012).
 
 ```bash
 uv venv -p 3.14 .venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
 (cd packages/mcp-state && maturin develop)
 (cd packages/mcp-git && maturin develop)
 (cd packages/mcp-docker && maturin develop)
 maturin develop
 pytest -q
+```
+
+### Lint / format
+
+| | Python | Rust |
+|--|--------|------|
+| Format | `ruff format` | `cargo fmt` |
+| Lint | `ruff check` + **mypy** | **clippy** (`-D warnings`) |
+
+```bash
+make fmt     # ruff + rustfmt
+make lint    # ruff + mypy + rustfmt --check + clippy
+make check   # lint + pytest
 ```
 
 ## Диск

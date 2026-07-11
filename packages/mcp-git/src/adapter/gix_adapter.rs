@@ -36,7 +36,11 @@ impl GitPort for GixGitAdapter {
         let bare = bare.canonicalize().unwrap_or_else(|_| bare.to_path_buf());
         let repo = gix::open(&bare).map_err(|e| GitError::msg(format!("open bare: {e}")))?;
 
-        if worktree_path.exists() && worktree_path.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false)
+        if worktree_path.exists()
+            && worktree_path
+                .read_dir()
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false)
         {
             return Err(GitError::msg(format!(
                 "worktree path not empty: {}",
@@ -77,10 +81,7 @@ impl GitPort for GixGitAdapter {
             format!("{}\n", abs_wt.join(".git").display()),
         )?;
         write_file(&wt_git_dir.join("commondir"), "../..\n")?;
-        write_file(
-            &wt_git_dir.join("HEAD"),
-            format!("{}\n", id.to_hex()),
-        )?;
+        write_file(&wt_git_dir.join("HEAD"), format!("{}\n", id.to_hex()))?;
 
         write_file(
             &worktree_path.join(".git"),
@@ -99,8 +100,8 @@ impl GitPort for GixGitAdapter {
         message: &str,
         paths: &[String],
     ) -> Result<String, GitError> {
-        let repo = gix::open(worktree_path)
-            .map_err(|e| GitError::msg(format!("open worktree: {e}")))?;
+        let repo =
+            gix::open(worktree_path).map_err(|e| GitError::msg(format!("open worktree: {e}")))?;
 
         // For v1: if paths empty, commit is a no-op message commit on current tree;
         // otherwise require files exist and rebuild tree from worktree files listed.
@@ -120,7 +121,8 @@ impl GitPort for GixGitAdapter {
         // Build a simple tree from listed files (flat paths only in v1)
         let mut entries: Vec<(String, gix::ObjectId)> = Vec::new();
         for p in paths {
-            let bytes = fs::read(worktree_path.join(p)).map_err(|e| GitError::msg(e.to_string()))?;
+            let bytes =
+                fs::read(worktree_path.join(p)).map_err(|e| GitError::msg(e.to_string()))?;
             let blob_id = repo
                 .write_blob(&bytes)
                 .map_err(|e| GitError::msg(format!("write blob: {e}")))?
@@ -183,11 +185,7 @@ fn checkout_tree_to(
     dest: &Path,
 ) -> Result<(), GitError> {
     // Recursively checkout tree entries as files/dirs (simple, no filters).
-    fn walk(
-        repo: &gix::Repository,
-        tree_id: gix::ObjectId,
-        base: &Path,
-    ) -> Result<(), GitError> {
+    fn walk(repo: &gix::Repository, tree_id: gix::ObjectId, base: &Path) -> Result<(), GitError> {
         let tree = repo
             .find_object(tree_id)
             .map_err(|e| GitError::msg(e.to_string()))?
@@ -252,8 +250,7 @@ fn write_flat_tree(
         for part in &parts[..parts.len() - 1] {
             node = node.dirs.entry((*part).to_string()).or_default();
         }
-        node.files
-            .insert(parts[parts.len() - 1].to_string(), *oid);
+        node.files.insert(parts[parts.len() - 1].to_string(), *oid);
     }
 
     fn write_node(repo: &gix::Repository, node: &Node) -> Result<gix::ObjectId, GitError> {

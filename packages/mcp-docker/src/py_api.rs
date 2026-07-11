@@ -15,12 +15,12 @@ impl DockerService {
     #[new]
     fn new() -> PyResult<Self> {
         Ok(Self {
-            inner: BollardDockerAdapter::new()
-                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            inner: BollardDockerAdapter::new().map_err(|e| PyValueError::new_err(e.to_string()))?,
         })
     }
 
     #[pyo3(signature = (image, cmd, binds=None, workdir=None, env=None, auto_remove=true))]
+    #[allow(clippy::too_many_arguments)]
     fn run<'py>(
         &self,
         py: Python<'py>,

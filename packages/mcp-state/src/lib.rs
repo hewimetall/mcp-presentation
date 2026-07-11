@@ -139,7 +139,7 @@ impl StateStore {
             )
             .optional()
             .map_err(|e| PyValueError::new_err(format!("get_session: {e}")))?;
-        Ok(row.map(|t| session_to_dict(py, t)).transpose()?)
+        row.map(|t| session_to_dict(py, t)).transpose()
     }
 
     fn list_sessions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
@@ -216,7 +216,7 @@ impl StateStore {
             )
             .optional()
             .map_err(|e| PyValueError::new_err(format!("get_workspace: {e}")))?;
-        Ok(row.map(|t| workspace_to_dict(py, t)).transpose()?)
+        row.map(|t| workspace_to_dict(py, t)).transpose()
     }
 
     #[pyo3(signature = (project_id=None, status=None))]

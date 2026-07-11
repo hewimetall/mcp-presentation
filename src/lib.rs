@@ -114,11 +114,7 @@ impl TaskStore {
     }
 
     /// Fetch one task as a dict, or None.
-    fn get<'py>(
-        &self,
-        py: Python<'py>,
-        task_id: &str,
-    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+    fn get<'py>(&self, py: Python<'py>, task_id: &str) -> PyResult<Option<Bound<'py, PyDict>>> {
         let conn = self.conn.lock();
         let row = conn
             .query_row(

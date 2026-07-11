@@ -22,7 +22,11 @@ mcp-git = { path = "packages/mcp-git", editable = true }
 mcp-docker = { path = "packages/mcp-docker", editable = true }
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.12",
+    "mypy>=1.16",
+]
 
 [project.scripts]
 mcp-presentation = "mcp_presentation.server:main"
@@ -31,3 +35,47 @@ mcp-presentation = "mcp_presentation.server:main"
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "mcp_presentation._tasks"
+
+# --- Ruff ---
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["python", "tests", "packages"]
+extend-exclude = ["target", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "RUF", # ruff-specific
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["mcp_presentation", "mcp_state", "mcp_git", "mcp_docker"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# --- Mypy ---
+[tool.mypy]
+python_version = "3.14"
+mypy_path = "python:packages/mcp-state/python:packages/mcp-git/python:packages/mcp-docker/python"
+packages = ["mcp_presentation", "mcp_state", "mcp_git", "mcp_docker"]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "mcp_presentation._tasks",
+    "mcp_state._native",
+    "mcp_git._native",
+    "mcp_docker._native",
+]
+ignore_missing_imports = true
