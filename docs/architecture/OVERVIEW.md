@@ -49,4 +49,13 @@
 
 See [`infra/README.md`](../infra/README.md).
 
+## Build worker
+
+After `build_presentation` / `deploy_presentation` enqueue into `TaskStore`,
+`wake_worker` starts a daemon that `claim_next` → optionally compiles IR →
+runs the matching image via `mcp-docker` → writes `done` / `error`.
+
+Deploy target is enqueued separately (ADR-0007); worker v1 marks it error
+until a real deploy adapter lands.
+
 ADRs: [`docs/adr/`](../adr/README.md)

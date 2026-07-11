@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import cast
 
 from fastmcp import FastMCP
-from mcp_state import StateStore
 
 from mcp_presentation._tasks import TaskStore
 from mcp_presentation.types import (
@@ -30,6 +29,8 @@ from mcp_presentation.types import (
     WorkspaceCreated,
     WorkspaceRow,
 )
+from mcp_presentation.worker import wake_worker
+from mcp_state import StateStore
 
 STATE_DIR = Path(os.environ.get("MCP_PRESENTATION_STATE", "state"))
 TASKS_DB = STATE_DIR / "tasks.db"
@@ -86,9 +87,7 @@ def get_session(session_id: str) -> GetSessionResult:
 
 
 @mcp.tool()
-def create_workspace(
-    project_id: str, path: str, ref_name: str = "main"
-) -> WorkspaceCreated:
+def create_workspace(project_id: str, path: str, ref_name: str = "main") -> WorkspaceCreated:
     """Register a workspace checkout in mcp-state (git worktree is separate)."""
     wid = get_state().create_workspace(project_id, path, ref_name=ref_name or None)
     return {"workspace_id": wid, "path": path, "project_id": project_id}
@@ -142,6 +141,7 @@ def build_presentation(session_id: str, target: str) -> BuildPresentationResult:
         return inactive
     path = ws_d["path"]
     tid = get_tasks().submit(session_id, path, target)
+    wake_worker(get_tasks())
     queued: BuildQueued = {"task_id": tid, "status": "queued", "workspace": path}
     return queued
 
@@ -185,6 +185,7 @@ def deploy_presentation(session_id: str, artifact: str = "") -> DeployPresentati
     tid = get_tasks().submit(session_id, path, "deploy")
     if artifact:
         get_tasks().update(tid, artifact=artifact)
+    wake_worker(get_tasks())
     queued: DeployQueued = {"task_id": tid, "status": "queued", "target": "deploy"}
     return queued
 

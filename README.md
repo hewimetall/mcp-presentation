@@ -46,9 +46,15 @@ make check   # lint + pytest
 make docker-build   # latex-builder + web-builder images
 ```
 
-## Builder images
+## Builder images + worker
 
 → [`infra/`](infra/README.md) — `mcp-presentation/latex-builder` (PDF) и `mcp-presentation/web-builder` (web / web-pdf).
+
+`build_presentation` ставит задачу в очередь; фоновый **BuildWorker** забирает
+её (`claim_next`), при необходимости компилирует `presentation.ir.json`,
+запускает образ через bollard и пишет статус в `state/tasks.db`.
+
+Образы: `MCP_LATEX_IMAGE` / `MCP_WEB_IMAGE` (по умолчанию теги выше).
 
 ## Диск
 

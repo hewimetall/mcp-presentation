@@ -44,7 +44,7 @@ WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run -
 WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run --rm web web
 ```
 
-## Worker mapping (planned)
+## Worker mapping
 
 | `build_presentation` target | Image | CMD |
 |-----------------------------|-------|-----|
@@ -53,6 +53,11 @@ WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run -
 
 Binds: `<abs workspace>:/work` via bollard `ContainerRuntime.run` (ADR-0012).
 
+After `build_presentation`, a daemon **BuildWorker** claims the task, optionally
+compiles `presentation.ir.json` → `main.tex` / `slides.md`, then runs the image.
+
 ## Note on IR
 
-Canonical IR is JSON (`presentation.ir.json`, ADR-0006). Compilers IR→`.tex` / IR→web will land in the worker; images already provide the heavy toolchain.
+Canonical IR is JSON (`presentation.ir.json`, ADR-0006). The worker compiles
+IR → Beamer `main.tex` / Marp `slides.md` when no native source is present;
+images provide the heavy toolchain.
