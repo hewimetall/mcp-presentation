@@ -9,7 +9,7 @@ description = "MCP server for presentation builds (PDF/web) with Rust task store
 requires-python = ">=3.14"
 readme = "README.md"
 dependencies = [
-    "fastmcp>=3.4.4",
+    "fastmcp[tasks]>=3.4.4",
     "pydantic>=2.12",
     "mcp-state",
     "mcp-git",

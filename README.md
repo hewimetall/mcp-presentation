@@ -25,11 +25,14 @@ create_session
   → checkout_workspace(session_id, project_id)   # gix worktree + state
   → save_presentation_ir(session_id, ir_json)    # Pydantic validate
   → commit_workspace(session_id, …)
-  → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # also refreshes out/slides/
-  → get_build_status(task_id)
+  → build_presentation(..., task=True)           # waits SQLite task + status notifications
   → get_slide_image(session_id, slide=1)         # read PNG only (after build)
-  → deploy_presentation(session_id)
+  → deploy_presentation(..., task=True)
 ```
+
+Immediate (no MCP task) still returns `{task_id, status: "queued"}`; inspect with
+`get_build_status(task_id)`. Preferred client UX: FastMCP `call_tool(..., task=True)`
+then `await task.result()` / `on_status_change` — same SQLite `task_id` (ADR-0003).
 
 Пример IR: [`examples/demo/presentation.ir.json`](examples/demo/presentation.ir.json)  
 JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.schema.json)
@@ -63,8 +66,10 @@ make docker-build   # latex-builder + web-builder images
 
 → [`infra/`](infra/README.md)
 
-`build_presentation` ставит задачу; **BuildWorker** делает `claim_next`, валидирует IR,
-компилирует в `.tex`/`.md` при необходимости, запускает образ через bollard.
+`build_presentation` / `deploy_presentation` ставят задачу в SQLite; при MCP
+`task=True` tool ждёт ту же строку и шлёт `notifications/tasks/status`.
+**BuildWorker** делает `claim_next`, валидирует IR, компилирует в `.tex`/`.md`
+при необходимости, запускает образ через bollard.
 
 Образы: `MCP_LATEX_IMAGE` / `MCP_WEB_IMAGE`.
 

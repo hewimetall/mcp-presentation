@@ -66,7 +66,7 @@ def test_full_flow_pdf_and_deploy() -> None:
     committed = server.commit_workspace(sid, "add ir", "presentation.ir.json")
     assert "commit_id" in committed
 
-    queued = server.build_presentation(sid, "pdf")
+    queued = server.enqueue_build(sid, "pdf")
     assert queued["status"] == "queued"
 
     import mcp_presentation.worker as worker_mod
@@ -77,7 +77,7 @@ def test_full_flow_pdf_and_deploy() -> None:
     assert status["status"] == "done"
     assert status.get("artifact")
 
-    dep = server.deploy_presentation(sid)
+    dep = server.enqueue_deploy(sid)
     assert dep["status"] == "queued"
     assert worker_mod._worker.process_one() is True
     dstatus = server.get_build_status(dep["task_id"])

@@ -40,10 +40,10 @@
 | `set_active_workspace` | bind session → workspace |
 | `save_presentation_ir` | validate + write `presentation.ir.json` |
 | `commit_workspace` | gix commit of listed paths |
-| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
-| `get_build_status` | poll task |
+| `build_presentation` | enqueue SQLite; with MCP `task=True` wait + status notifications |
+| `get_build_status` | inspect SQLite task row |
 | `get_slide_image` | PNG одного **готового** слайда; без сборки (после pdf/web) |
-| `deploy_presentation` | enqueue local deploy |
+| `deploy_presentation` | enqueue deploy; with MCP `task=True` wait + notifications |
 
 ## Task statuses
 
@@ -95,6 +95,11 @@ After enqueue, `wake_worker` starts a daemon that:
 2. validates IR (if present)
 3. web → `run_web_target` / pdf → latex path / deploy → local copy
 4. writes `done` / `error`
+
+MCP clients should prefer `call_tool("build_presentation", …, task=True)` then
+`await task.result()` / `on_status_change`. The tool waits on the **same** SQLite
+`task_id` and pushes `notifications/tasks/status` (Progress bridge). Docket is only
+the protocol wait layer — not the durable queue (ADR-0003).
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).
 

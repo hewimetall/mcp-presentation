@@ -165,6 +165,7 @@ GetBuildStatusResult = TaskRow | ErrorTaskNotFound
 GetWorkspaceResult = WorkspaceRow | ErrorWorkspaceNotFound
 BuildPresentationResult = (
     BuildQueued
+    | TaskRow
     | ErrorInvalidTarget
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
@@ -172,6 +173,7 @@ BuildPresentationResult = (
 )
 DeployPresentationResult = (
     DeployQueued
+    | TaskRow
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable

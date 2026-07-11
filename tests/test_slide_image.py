@@ -110,7 +110,7 @@ def test_get_slide_image_after_web_build() -> None:
     assert isinstance(missing, dict)
     assert missing["error"] == "no_artifact"
 
-    queued = server.build_presentation(sid, "web")
+    queued = server.enqueue_build(sid, "web")
     import mcp_presentation.worker as worker_mod
 
     assert worker_mod._worker is not None
