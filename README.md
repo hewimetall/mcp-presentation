@@ -8,9 +8,9 @@ MCP-сервер для сборки презентаций (**PDF** / **web**) 
 - **Rust / PyO3** (`rusqlite`) — TaskStore, embedded SQLite (`state/tasks.db`)
 - **maturin** — сборка native extension
 
-## Решения
+## ADR
 
-→ [`docs/architecture/DECISIONS.md`](docs/architecture/DECISIONS.md)
+Архитектурные решения фиксируются в **[`docs/adr/`](docs/adr/README.md)**.
 
 ## Состояние на диске
 
