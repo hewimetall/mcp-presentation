@@ -3,7 +3,10 @@
 
 RUST_CRATES := . packages/mcp-state packages/mcp-git packages/mcp-docker
 
-.PHONY: fmt fmt-py fmt-rust lint lint-py lint-rust check test
+LATEX_IMAGE := mcp-presentation/latex-builder:latest
+WEB_IMAGE := mcp-presentation/web-builder:latest
+
+.PHONY: fmt fmt-py fmt-rust lint lint-py lint-rust check test docker-build docker-build-latex docker-build-web
 
 fmt: fmt-py fmt-rust
 
@@ -36,3 +39,11 @@ check: lint test
 
 test:
 	pytest -q
+
+docker-build: docker-build-latex docker-build-web
+
+docker-build-latex:
+	docker build -t $(LATEX_IMAGE) infra/docker/latex
+
+docker-build-web:
+	docker build -t $(WEB_IMAGE) infra/docker/web

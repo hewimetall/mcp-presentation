@@ -43,7 +43,12 @@ pytest -q
 make fmt     # ruff + rustfmt
 make lint    # ruff + mypy + rustfmt --check + clippy
 make check   # lint + pytest
+make docker-build   # latex-builder + web-builder images
 ```
+
+## Builder images
+
+→ [`infra/`](infra/README.md) — `mcp-presentation/latex-builder` (PDF) и `mcp-presentation/web-builder` (web / web-pdf).
 
 ## Диск
 

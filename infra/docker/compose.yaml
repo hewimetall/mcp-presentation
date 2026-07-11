@@ -1,0 +1,26 @@
+# Local helpers to build / run presentation builder images.
+# Production worker uses bollard with the same image tags (ADR-0012).
+
+name: mcp-presentation-infra
+
+services:
+  latex:
+    image: mcp-presentation/latex-builder:latest
+    build:
+      context: ./latex
+      dockerfile: Dockerfile
+    working_dir: /work
+    volumes:
+      - ${WORKSPACE:-../..}:/work
+    # override: docker compose run latex pdf
+
+  web:
+    image: mcp-presentation/web-builder:latest
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    working_dir: /work
+    volumes:
+      - ${WORKSPACE:-../..}:/work
+    # override: docker compose run web web
+    #           docker compose run web web-pdf

@@ -40,4 +40,13 @@
 - `run(image, binds, cmd, …)` via bollard
 - DooD / rootless socket (ADR-0008 / ADR-0012)
 
+## Builder images (`infra/docker`)
+
+| Target | Image |
+|--------|-------|
+| `pdf` | `mcp-presentation/latex-builder:latest` |
+| `web` | `mcp-presentation/web-builder:latest` |
+
+See [`infra/README.md`](../infra/README.md).
+
 ADRs: [`docs/adr/`](../adr/README.md)

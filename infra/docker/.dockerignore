@@ -1,0 +1,15 @@
+# Shared ignore for builder contexts
+**/.git
+**/node_modules
+**/dist
+**/out
+**/target
+**/.venv
+**/__pycache__
+**/*.pdf
+**/*.aux
+**/*.log
+**/*.toc
+**/*.fls
+**/*.fdb_latexmk
+**/*.synctex.gz
