@@ -38,7 +38,15 @@ def test_await_sqlite_task_mirrors_statuses(tmp_path: Path) -> None:
     joined = " | ".join(m for m in progress.messages if m)
     assert f"task_id={tid} status=queued" in joined
     assert f"task_id={tid} status=done" in joined
-    assert status_message(row).startswith(f"task_id={tid} status=done")
+    assert "artifact=" not in joined
+    assert status_message(row) == f"task_id={tid} status=done"
+
+
+def test_await_sqlite_task_timeout(tmp_path: Path) -> None:
+    store = TaskStore(str(tmp_path / "t.db"))
+    tid = store.submit("sess", str(tmp_path / "ws"), "web")
+    with pytest.raises(TimeoutError, match="timed out"):
+        asyncio.run(await_sqlite_task(store, tid, poll_seconds=0.02, timeout=0.08))
 
 
 def test_await_sqlite_task_missing(tmp_path: Path) -> None:

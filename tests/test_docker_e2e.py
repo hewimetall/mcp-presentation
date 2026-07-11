@@ -78,7 +78,7 @@ def demo_ws(tmp_path: Path) -> Path:
 def test_docker_web_emits_dist_and_slides(demo_ws: Path, runner: DockerService) -> None:
     if not _image_present("mcp-presentation/web-builder:latest"):
         pytest.skip("web-builder image missing; run make docker-build")
-    artifact = build_web(demo_ws, runner)
+    artifact, _logs = build_web(demo_ws, runner)
     assert artifact.is_dir()
     assert (artifact / "index.html").is_file()
     idxs = slide_indices(demo_ws)

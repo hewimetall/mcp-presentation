@@ -172,6 +172,18 @@ class ErrorInvalidSlide(TypedDict):
     available: list[int]
 
 
+class ErrorWorkspaceExists(TypedDict):
+    error: Literal["workspace_exists"]
+    workspace_id: str
+    detail: str
+
+
+class ErrorWaitTimeout(TypedDict):
+    error: Literal["wait_timeout"]
+    task_id: str
+    detail: str
+
+
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
@@ -183,6 +195,7 @@ BuildPresentationResult = (
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
+    | ErrorWaitTimeout
 )
 DeployPresentationResult = (
     DeployQueued
@@ -191,6 +204,7 @@ DeployPresentationResult = (
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
     | ErrorNoArtifact
+    | ErrorWaitTimeout
 )
 GetSlideImageResult = (
     SlideImageOk
@@ -201,7 +215,13 @@ GetSlideImageResult = (
     | ErrorNoArtifact
 )
 CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit
-CheckoutWorkspaceResult = CheckoutResult | ErrorSessionNotFound | ErrorInvalidId | ErrorGit
+CheckoutWorkspaceResult = (
+    CheckoutResult
+    | ErrorSessionNotFound
+    | ErrorInvalidId
+    | ErrorGit
+    | ErrorWorkspaceExists
+)
 SaveIrResult = (
     IrSaved
     | ErrorSessionNotFound

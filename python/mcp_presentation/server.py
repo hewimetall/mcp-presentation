@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -44,6 +45,8 @@ from mcp_presentation.types import (
     ErrorNotFound,
     ErrorSessionNotFound,
     ErrorTaskNotFound,
+    ErrorWaitTimeout,
+    ErrorWorkspaceExists,
     ErrorWorkspaceNotFound,
     ErrorWorkspaceUnavailable,
     GetBuildStatusResult,
@@ -76,7 +79,6 @@ mcp = FastMCP("mcp-presentation")
 _tasks: TaskStore | None = None
 _state: StateStore | None = None
 _git: GitService | None = None
-_PROGRESS = Progress()
 _BUILD_TASK = TaskConfig(mode="optional", poll_interval=timedelta(seconds=1))
 
 
@@ -113,6 +115,30 @@ def _workspace_row(row: object) -> WorkspaceRow:
 
 def _task_row(row: object) -> TaskRow:
     return cast(TaskRow, row)
+
+
+async def _wait_queued_task(
+    tid: str,
+    progress: Progress,
+) -> TaskRow | ErrorWaitTimeout:
+    reporter: Progress | None = progress if getattr(progress, "_impl", None) is not None else None
+    if reporter is not None:
+        await reporter.set_total(3)
+        await reporter.set_message(f"task_id={tid} status=queued")
+    try:
+        row = await await_sqlite_task(get_tasks(), tid, reporter)
+        if reporter is not None:
+            await reporter.increment(3)
+        return row
+    except TimeoutError as exc:
+        with suppress(Exception):
+            get_tasks().update(tid, status="error", error=str(exc))
+        timed_out: ErrorWaitTimeout = {
+            "error": "wait_timeout",
+            "task_id": tid,
+            "detail": str(exc),
+        }
+        return timed_out
 
 
 def _active_workspace(
@@ -241,18 +267,32 @@ def checkout_workspace(
         return bad_id
 
     WORKSPACES_DIR.mkdir(parents=True, exist_ok=True)
+    if get_state().get_workspace(wid) is not None:
+        exists: ErrorWorkspaceExists = {
+            "error": "workspace_exists",
+            "workspace_id": wid,
+            "detail": "workspace_id already registered; pass a new id or remove the old row",
+        }
+        return exists
     try:
         abs_wt = get_git().add_worktree(str(bare), str(wt), ref_name)
     except Exception as exc:
         git_fail: ErrorGit = {"error": "git_error", "detail": str(exc)}
         return git_fail
 
-    state_wid = get_state().create_workspace(
-        project_id,
-        abs_wt,
-        ref_name=ref_name or None,
-        workspace_id=wid,
-    )
+    try:
+        state_wid = get_state().create_workspace(
+            project_id,
+            abs_wt,
+            ref_name=ref_name or None,
+            workspace_id=wid,
+        )
+    except Exception as exc:
+        state_fail: ErrorGit = {
+            "error": "git_error",
+            "detail": f"worktree created at {abs_wt} but state register failed: {exc}",
+        }
+        return state_fail
     get_state().set_active_workspace(session_id, state_wid)
     result: CheckoutResult = {
         "workspace_id": state_wid,
@@ -401,7 +441,7 @@ async def build_presentation(
     session_id: str,
     target: str,
     ctx: Context | None = None,
-    progress: Progress = _PROGRESS,
+    progress: Progress = Progress(),  # noqa: B008 — FastMCP DI factory
 ) -> BuildPresentationResult:
     """Build for the active workspace and wait until SQLite task is terminal.
 
@@ -412,15 +452,7 @@ async def build_presentation(
     queued = enqueue_build(session_id, target)
     if "error" in queued:
         return queued
-    tid = str(queued["task_id"])
-    reporter = progress if getattr(progress, "_impl", None) is not None else None
-    if reporter is not None:
-        await reporter.set_total(3)
-        await reporter.set_message(f"task_id={tid} status=queued")
-    row = await await_sqlite_task(get_tasks(), tid, reporter)
-    if reporter is not None:
-        await reporter.increment(3)
-    return row
+    return await _wait_queued_task(str(queued["task_id"]), progress)
 
 
 @mcp.tool()
@@ -526,7 +558,7 @@ async def deploy_presentation(
     session_id: str,
     artifact: str = "",
     ctx: Context | None = None,
-    progress: Progress = _PROGRESS,
+    progress: Progress = Progress(),  # noqa: B008 — FastMCP DI factory
 ) -> DeployPresentationResult:
     """Local-copy deploy (not a URL). Waits on the SQLite task until done/error.
 
@@ -536,15 +568,7 @@ async def deploy_presentation(
     queued = enqueue_deploy(session_id, artifact)
     if "error" in queued:
         return queued
-    tid = str(queued["task_id"])
-    reporter = progress if getattr(progress, "_impl", None) is not None else None
-    if reporter is not None:
-        await reporter.set_total(3)
-        await reporter.set_message(f"task_id={tid} status=queued")
-    row = await await_sqlite_task(get_tasks(), tid, reporter)
-    if reporter is not None:
-        await reporter.increment(3)
-    return row
+    return await _wait_queued_task(str(queued["task_id"]), progress)
 
 
 def main() -> None:
