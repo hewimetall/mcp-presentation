@@ -1,33 +1,31 @@
-"""Minimal IR → LaTeX / Marp sources so builder images have something to compile."""
+"""IR → LaTeX / Marp sources so builder images have something to compile."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import NotRequired, TypedDict, cast
 
+from mcp_presentation.ir_models import PresentationIr, validate_ir_obj
 
-class IrSlide(TypedDict):
-    title: str
-    bullets: NotRequired[list[str]]
-    body: NotRequired[str]
-
-
-class PresentationIr(TypedDict):
-    title: str
-    author: NotRequired[str]
-    slides: NotRequired[list[IrSlide]]
+IR_FILENAME = "presentation.ir.json"
 
 
 def load_ir(workspace: Path) -> PresentationIr | None:
-    path = workspace / "presentation.ir.json"
+    path = workspace / IR_FILENAME
     if not path.is_file():
         return None
     raw: object = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        msg = "presentation.ir.json must be an object"
-        raise ValueError(msg)
-    return cast(PresentationIr, raw)
+    return validate_ir_obj(raw)
+
+
+def write_ir(workspace: Path, ir: PresentationIr) -> Path:
+    workspace.mkdir(parents=True, exist_ok=True)
+    path = workspace / IR_FILENAME
+    path.write_text(
+        ir.model_dump_json(indent=2, exclude_none=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def ensure_latex_source(workspace: Path) -> Path | None:
@@ -80,33 +78,36 @@ def _escape_tex(text: str) -> str:
 
 
 def _ir_to_beamer(ir: PresentationIr) -> str:
-    title = _escape_tex(ir.get("title") or "Presentation")
-    author = _escape_tex(ir.get("author") or "")
-    slides = ir.get("slides") or []
+    title = _escape_tex(ir.title)
+    author = _escape_tex(ir.author or "")
+    lang = ir.language or "english"
+    babel = "russian,english" if lang.startswith("ru") else "english"
     parts: list[str] = [
         r"\documentclass{beamer}",
         r"\usepackage[T2A]{fontenc}",
         r"\usepackage[utf8]{inputenc}",
-        r"\usepackage[russian,english]{babel}",
+        rf"\usepackage[{babel}]{{babel}}",
         rf"\title{{{title}}}",
         rf"\author{{{author}}}",
         r"\begin{document}",
         r"\frame{\titlepage}",
     ]
-    for slide in slides:
-        st = _escape_tex(slide.get("title") or "")
+    if ir.theme:
+        parts.insert(1, f"% theme hint: {_escape_tex(ir.theme)}")
+    for slide in ir.slides:
+        st = _escape_tex(slide.title)
         parts.append(rf"\begin{{frame}}{{{st}}}")
-        bullets = slide.get("bullets") or []
-        if bullets:
+        if slide.bullets:
             parts.append(r"\begin{itemize}")
-            for b in bullets:
+            for b in slide.bullets:
                 parts.append(rf"  \item {_escape_tex(b)}")
             parts.append(r"\end{itemize}")
-        body = slide.get("body")
-        if body:
-            parts.append(_escape_tex(body))
+        if slide.body:
+            parts.append(_escape_tex(slide.body))
+        if slide.notes:
+            parts.append(rf"\note{{{_escape_tex(slide.notes)}}}")
         parts.append(r"\end{frame}")
-    if not slides:
+    if not ir.slides:
         parts.append(r"\begin{frame}{Empty}")
         parts.append(r"No slides in IR.")
         parts.append(r"\end{frame}")
@@ -115,26 +116,25 @@ def _ir_to_beamer(ir: PresentationIr) -> str:
 
 
 def _ir_to_marp(ir: PresentationIr) -> str:
-    title = ir.get("title") or "Presentation"
-    author = ir.get("author") or ""
     lines = [
         "---",
         "marp: true",
-        f"title: {title}",
-        f"author: {author}",
-        "---",
-        "",
-        f"# {title}",
-        "",
+        f"title: {ir.title}",
     ]
-    if author:
-        lines.extend([f"*{author}*", ""])
-    for slide in ir.get("slides") or []:
-        lines.extend(["---", "", f"## {slide.get('title') or ''}", ""])
-        for b in slide.get("bullets") or []:
+    if ir.author:
+        lines.append(f"author: {ir.author}")
+    if ir.theme:
+        lines.append(f"theme: {ir.theme}")
+    lines.extend(["---", "", f"# {ir.title}", ""])
+    if ir.author:
+        lines.extend([f"*{ir.author}*", ""])
+    for slide in ir.slides:
+        lines.extend(["---", "", f"## {slide.title}", ""])
+        for b in slide.bullets:
             lines.append(f"- {b}")
-        body = slide.get("body")
-        if body:
-            lines.extend(["", body, ""])
+        if slide.body:
+            lines.extend(["", slide.body, ""])
+        if slide.notes:
+            lines.extend(["", f"<!-- notes: {slide.notes} -->", ""])
         lines.append("")
     return "\n".join(lines)

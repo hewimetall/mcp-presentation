@@ -32,3 +32,9 @@ def test_submit_get_claim(tmp_path: Path) -> None:
     done = store.get(tid)
     assert done["status"] == "done"
     assert done["artifact"] == "out/main.pdf"
+
+    latest = store.find_latest_done("ws/a")
+    assert latest is not None
+    assert latest["task_id"] == tid
+    assert store.find_latest_done("ws/a", "web") is None
+    assert store.find_latest_done("ws/missing") is None

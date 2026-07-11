@@ -24,6 +24,8 @@ impl GitPort for GixGitAdapter {
             fs::create_dir_all(parent).map_err(|e| GitError::msg(e.to_string()))?;
         }
         let repo = gix::init_bare(path).map_err(|e| GitError::msg(e.to_string()))?;
+        // Seed empty commit on refs/heads/main so add_worktree can peel HEAD.
+        seed_empty_main(&repo)?;
         Ok(repo.path().to_owned())
     }
 
@@ -57,9 +59,10 @@ impl GitPort for GixGitAdapter {
         let wt_git_dir = bare.join("worktrees").join(name);
         fs::create_dir_all(&wt_git_dir).map_err(|e| GitError::msg(e.to_string()))?;
 
-        // Resolve ref → object id (default HEAD)
+        // Resolve ref → object id (default refs/heads/main via HEAD)
+        let branch_ref = normalize_branch_ref(ref_name);
         let mut head = repo
-            .find_reference(ref_name)
+            .find_reference(&branch_ref)
             .or_else(|_| repo.find_reference("HEAD"))
             .map_err(|e| GitError::msg(format!("resolve ref {ref_name}: {e}")))?;
         let id = head
@@ -81,7 +84,8 @@ impl GitPort for GixGitAdapter {
             format!("{}\n", abs_wt.join(".git").display()),
         )?;
         write_file(&wt_git_dir.join("commondir"), "../..\n")?;
-        write_file(&wt_git_dir.join("HEAD"), format!("{}\n", id.to_hex()))?;
+        // Symbolic HEAD so commits update the shared branch on the bare repo.
+        write_file(&wt_git_dir.join("HEAD"), format!("ref: {branch_ref}\n"))?;
 
         write_file(
             &worktree_path.join(".git"),
@@ -167,6 +171,53 @@ impl GitPort for GixGitAdapter {
 
         Ok(commit_id.to_string())
     }
+}
+
+fn normalize_branch_ref(ref_name: &str) -> String {
+    if ref_name == "HEAD" || ref_name.is_empty() {
+        "refs/heads/main".to_string()
+    } else if ref_name.starts_with("refs/") {
+        ref_name.to_string()
+    } else {
+        format!("refs/heads/{ref_name}")
+    }
+}
+
+/// Create an empty-tree commit on `refs/heads/main` and point HEAD at it.
+fn seed_empty_main(repo: &gix::Repository) -> Result<(), GitError> {
+    let tree = gix::objs::Tree::empty();
+    let tree_id = repo
+        .write_object(&tree)
+        .map_err(|e| GitError::msg(format!("write empty tree: {e}")))?
+        .detach();
+
+    let author = gix::actor::Signature {
+        name: "mcp-git".into(),
+        email: "mcp-git@localhost".into(),
+        time: gix::date::Time::now_local_or_utc(),
+    };
+    let mut author_buf = gix_date::parse::TimeBuf::default();
+    let mut committer_buf = gix_date::parse::TimeBuf::default();
+    let author_ref = author.to_ref(&mut author_buf);
+    let committer_ref = author.to_ref(&mut committer_buf);
+
+    let parents: Vec<gix::ObjectId> = Vec::new();
+    repo.commit_as(
+        committer_ref,
+        author_ref,
+        "refs/heads/main",
+        "initial empty commit",
+        tree_id,
+        parents.iter().copied(),
+    )
+    .map_err(|e| GitError::msg(format!("seed commit: {e}")))?;
+
+    // Ensure symbolic HEAD → refs/heads/main (gix init_bare usually does this).
+    let head_path = repo.path().join("HEAD");
+    if !head_path.exists() {
+        write_file(&head_path, "ref: refs/heads/main\n")?;
+    }
+    Ok(())
 }
 
 fn write_file(path: &Path, content: impl AsRef<[u8]>) -> Result<(), GitError> {

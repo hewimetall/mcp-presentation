@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build PDF from workspace mounted at /work.
-# Prefers main.tex / presentation.tex; falls back to IR stub note.
+# Expects main.tex|presentation.tex|slides.tex (IR is compiled to main.tex by the host worker).
 set -euo pipefail
 
 WORK="${WORK_DIR:-/work}"
@@ -27,7 +27,7 @@ done
 
 if [[ -z "${TEX}" ]]; then
   echo "error: no .tex source in ${WORK} (expected main.tex|presentation.tex|slides.tex)" >&2
-  echo "hint: IR→LaTeX compiler will emit main.tex here in a later step" >&2
+  echo "hint: host BuildWorker emits main.tex from presentation.ir.json before the container runs" >&2
   exit 1
 fi
 

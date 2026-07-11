@@ -10,6 +10,8 @@ WEB_IMAGE = os.environ.get("MCP_WEB_IMAGE", "mcp-presentation/web-builder:latest
 
 CONTAINER_WORK = "/work"
 
+BUILD_TARGETS = frozenset({"pdf", "web", "web-pdf"})
+
 
 def workspace_bind(host_workspace: Path) -> str:
     """Absolute host path → bollard bind `host:container`."""
@@ -22,6 +24,8 @@ def artifact_for_target(host_workspace: Path, target: str) -> Path:
         return host_workspace / "out" / "main.pdf"
     if target == "web":
         return host_workspace / "dist"
+    if target == "web-pdf":
+        return host_workspace / "out" / "web.pdf"
     if target == "deploy":
         return host_workspace / "out" / "deployed"
     return host_workspace / "out" / "unknown"

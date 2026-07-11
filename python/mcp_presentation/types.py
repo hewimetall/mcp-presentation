@@ -46,6 +46,31 @@ class WorkspaceCreated(TypedDict):
     project_id: str
 
 
+class ProjectCreated(TypedDict):
+    project_id: str
+    bare_path: str
+
+
+class CheckoutResult(TypedDict):
+    workspace_id: str
+    path: str
+    project_id: str
+    ref_name: str
+    bare_path: str
+    session_id: str
+
+
+class IrSaved(TypedDict):
+    path: str
+    workspace_id: str
+
+
+class CommitResult(TypedDict):
+    commit_id: str
+    workspace_id: str
+    paths: list[str]
+
+
 class BuildQueued(TypedDict):
     task_id: str
     status: Literal["queued"]
@@ -56,6 +81,20 @@ class DeployQueued(TypedDict):
     task_id: str
     status: Literal["queued"]
     target: Literal["deploy"]
+    artifact: str | None
+
+
+class WorkspaceRemoved(TypedDict):
+    workspace_id: str
+    status: Literal["removed"]
+
+
+class SessionsList(TypedDict):
+    sessions: list[SessionRow]
+
+
+class WorkspacesList(TypedDict):
+    workspaces: list[WorkspaceRow]
 
 
 class ErrorNotFound(TypedDict):
@@ -66,6 +105,11 @@ class ErrorNotFound(TypedDict):
 class ErrorTaskNotFound(TypedDict):
     error: Literal["not_found"]
     task_id: str
+
+
+class ErrorWorkspaceNotFound(TypedDict):
+    error: Literal["not_found"]
+    workspace_id: str
 
 
 class ErrorSessionNotFound(TypedDict):
@@ -88,9 +132,30 @@ class ErrorInvalidTarget(TypedDict):
     allowed: list[str]
 
 
+class ErrorInvalidIr(TypedDict):
+    error: Literal["invalid_ir"]
+    detail: str
+
+
+class ErrorInvalidId(TypedDict):
+    error: Literal["invalid_id"]
+    detail: str
+
+
+class ErrorGit(TypedDict):
+    error: Literal["git_error"]
+    detail: str
+
+
+class ErrorNoArtifact(TypedDict):
+    error: Literal["no_artifact"]
+    detail: str
+
+
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
+GetWorkspaceResult = WorkspaceRow | ErrorWorkspaceNotFound
 BuildPresentationResult = (
     BuildQueued
     | ErrorInvalidTarget
@@ -99,5 +164,26 @@ BuildPresentationResult = (
     | ErrorWorkspaceUnavailable
 )
 DeployPresentationResult = (
-    DeployQueued | ErrorSessionNotFound | ErrorNoActiveWorkspace | ErrorWorkspaceUnavailable
+    DeployQueued
+    | ErrorSessionNotFound
+    | ErrorNoActiveWorkspace
+    | ErrorWorkspaceUnavailable
+    | ErrorNoArtifact
 )
+CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit
+CheckoutWorkspaceResult = CheckoutResult | ErrorSessionNotFound | ErrorInvalidId | ErrorGit
+SaveIrResult = (
+    IrSaved
+    | ErrorSessionNotFound
+    | ErrorNoActiveWorkspace
+    | ErrorWorkspaceUnavailable
+    | ErrorInvalidIr
+)
+CommitWorkspaceResult = (
+    CommitResult
+    | ErrorSessionNotFound
+    | ErrorNoActiveWorkspace
+    | ErrorWorkspaceUnavailable
+    | ErrorGit
+)
+RemoveWorkspaceResult = WorkspaceRemoved | ErrorWorkspaceNotFound

@@ -28,7 +28,6 @@ class FakeRunner:
         auto_remove: bool = True,
     ) -> WorkerRunResult:
         self.calls.append((image, cmd, list(binds or [])))
-        # Simulate latex entrypoint artifact
         if binds:
             host = binds[0].split(":", 1)[0]
             out = Path(host) / "out"
@@ -39,6 +38,8 @@ class FakeRunner:
                 dist = Path(host) / "dist"
                 dist.mkdir(parents=True, exist_ok=True)
                 (dist / "index.html").write_text("<html></html>", encoding="utf-8")
+            if cmd == ["web-pdf"]:
+                (out / "web.pdf").write_bytes(b"%PDF-web")
         return WorkerRunResult(
             status_code=self.status_code,
             logs="ok\n",
@@ -117,17 +118,41 @@ def test_worker_missing_source(tmp_path: Path) -> None:
     assert runner.calls == []
 
 
-def test_worker_deploy_rejected(tmp_path: Path) -> None:
+def test_worker_invalid_ir(tmp_path: Path) -> None:
     db = tmp_path / "tasks.db"
     ws = tmp_path / "ws"
     ws.mkdir()
+    (ws / "presentation.ir.json").write_text('{"title":""}', encoding="utf-8")
     store = TaskStore(str(db))
+    runner = FakeRunner()
+    worker = BuildWorker(store, runner)
+    tid = store.submit("s1", str(ws), "pdf")
+    assert worker.process_one() is True
+    row = store.get(tid)
+    assert row is not None
+    assert row["status"] == "error"
+    assert "invalid presentation IR" in (row["error"] or "")
+
+
+def test_worker_deploy_local(tmp_path: Path) -> None:
+    db = tmp_path / "tasks.db"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    pdf = ws / "out" / "main.pdf"
+    pdf.parent.mkdir(parents=True)
+    pdf.write_bytes(b"%PDF")
+    store = TaskStore(str(db))
+    # seed a done build so find_latest_done works without explicit artifact
+    build_id = store.submit("s1", str(ws), "pdf")
+    store.update(build_id, status="done", artifact=str(pdf))
     runner = FakeRunner()
     worker = BuildWorker(store, runner)
     tid = store.submit("s1", str(ws), "deploy")
     assert worker.process_one() is True
     row = store.get(tid)
     assert row is not None
-    assert row["status"] == "error"
-    assert "not implemented" in (row["error"] or "")
+    assert row["status"] == "done"
+    assert row["artifact"] is not None
+    assert Path(row["artifact"]).is_file()
+    assert (ws / "out" / "deployed" / "manifest.json").is_file()
     assert runner.calls == []

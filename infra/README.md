@@ -50,14 +50,18 @@ WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run -
 |-----------------------------|-------|-----|
 | `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` |
 | `web` | `mcp-presentation/web-builder:latest` | `web` |
+| `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
 
 Binds: `<abs workspace>:/work` via bollard `ContainerRuntime.run` (ADR-0012).
 
-After `build_presentation`, a daemon **BuildWorker** claims the task, optionally
-compiles `presentation.ir.json` → `main.tex` / `slides.md`, then runs the image.
+After `build_presentation`, a daemon **BuildWorker** claims the task, validates
+`presentation.ir.json` (Pydantic), optionally compiles IR → `main.tex` / `slides.md`,
+then runs the image.
+
+Deploy uses a **local adapter** (no container): copy artifact → `out/deployed/` + manifest.
 
 ## Note on IR
 
-Canonical IR is JSON (`presentation.ir.json`, ADR-0006). The worker compiles
-IR → Beamer `main.tex` / Marp `slides.md` when no native source is present;
-images provide the heavy toolchain.
+Canonical IR is JSON (`presentation.ir.json`, ADR-0006). Schema:
+[`schemas/presentation.ir.schema.json`](../schemas/presentation.ir.schema.json).
+The worker compiles IR → Beamer / Marp when no native source is present.

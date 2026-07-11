@@ -82,3 +82,9 @@ module = [
     "mcp_docker._native",
 ]
 ignore_missing_imports = true
+
+# Pydantic BaseModel annotations trip disallow_any_explicit without the plugin.
+[[tool.mypy.overrides]]
+module = ["mcp_presentation.ir_models"]
+disallow_any_explicit = false
+disallow_any_generics = false

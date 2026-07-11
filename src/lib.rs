@@ -204,6 +204,76 @@ impl TaskStore {
 
         Ok(Some(row_to_dict(py, full)?))
     }
+
+    /// Latest successful build for a workspace (pdf/web), optionally filtered by target.
+    #[pyo3(signature = (workspace, target=None))]
+    fn find_latest_done<'py>(
+        &self,
+        py: Python<'py>,
+        workspace: &str,
+        target: Option<&str>,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let conn = self.conn.lock();
+        let row = if let Some(t) = target {
+            conn.query_row(
+                "SELECT task_id, session_id, workspace, target, status,
+                        artifact, logs, error, created_at, updated_at
+                 FROM tasks
+                 WHERE status = 'done' AND workspace = ?1 AND target = ?2
+                 ORDER BY updated_at DESC
+                 LIMIT 1",
+                params![workspace, t],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                        r.get::<_, Option<String>>(5)?,
+                        r.get::<_, Option<String>>(6)?,
+                        r.get::<_, Option<String>>(7)?,
+                        r.get::<_, i64>(8)?,
+                        r.get::<_, i64>(9)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| PyValueError::new_err(format!("find_latest_done: {e}")))?
+        } else {
+            conn.query_row(
+                "SELECT task_id, session_id, workspace, target, status,
+                        artifact, logs, error, created_at, updated_at
+                 FROM tasks
+                 WHERE status = 'done' AND workspace = ?1
+                   AND target IN ('pdf', 'web', 'web-pdf')
+                 ORDER BY updated_at DESC
+                 LIMIT 1",
+                params![workspace],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, String>(4)?,
+                        r.get::<_, Option<String>>(5)?,
+                        r.get::<_, Option<String>>(6)?,
+                        r.get::<_, Option<String>>(7)?,
+                        r.get::<_, i64>(8)?,
+                        r.get::<_, i64>(9)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|e| PyValueError::new_err(format!("find_latest_done: {e}")))?
+        };
+
+        match row {
+            None => Ok(None),
+            Some(t) => Ok(Some(row_to_dict(py, t)?)),
+        }
+    }
 }
 
 type TaskRow = (

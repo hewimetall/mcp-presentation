@@ -1,4 +1,4 @@
-"""Background build worker: claim_next → IR compile → bollard container."""
+"""Background build worker: claim_next → IR compile / deploy → container."""
 
 from __future__ import annotations
 
@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from mcp_presentation._tasks import TaskStore
-from mcp_presentation.ir_compile import ensure_latex_source, ensure_web_source
+from mcp_presentation.deploy import deploy_local
+from mcp_presentation.ir_compile import ensure_latex_source, ensure_web_source, load_ir
 from mcp_presentation.settings import (
+    BUILD_TARGETS,
     CONTAINER_WORK,
     LATEX_IMAGE,
     WEB_IMAGE,
@@ -59,7 +61,7 @@ def _as_task(row: object) -> TaskRow:
 
 
 class BuildWorker:
-    """Poll TaskStore, run latex/web images, write status back."""
+    """Poll TaskStore, run latex/web images or local deploy, write status back."""
 
     def __init__(
         self,
@@ -124,14 +126,17 @@ class BuildWorker:
             host_ws = host_ws.resolve()
 
         if target == "deploy":
-            self._tasks.update(
-                tid,
-                status="error",
-                error="deploy target not implemented in worker v1",
-            )
+            self._run_deploy(tid, task, host_ws)
+            return
+
+        if target not in BUILD_TARGETS:
+            self._tasks.update(tid, status="error", error=f"unsupported target: {target}")
             return
 
         try:
+            # Validate IR early when present (native .tex/.md may skip).
+            if (host_ws / "presentation.ir.json").is_file():
+                load_ir(host_ws)
             image, cmd = self._prepare(host_ws, target)
         except ValueError as exc:
             self._tasks.update(tid, status="error", error=str(exc))
@@ -163,7 +168,7 @@ class BuildWorker:
                 logs=logs,
             )
             return
-        if target == "pdf" and not artifact.is_file():
+        if target in {"pdf", "web-pdf"} and not artifact.is_file():
             self._tasks.update(
                 tid,
                 status="error",
@@ -186,6 +191,38 @@ class BuildWorker:
             logs=logs,
         )
 
+    def _run_deploy(self, tid: str, task: TaskRow, host_ws: Path) -> None:
+        artifact_s = task.get("artifact")
+        artifact: Path | None = Path(artifact_s) if artifact_s else None
+        if artifact is None or not artifact.exists():
+            latest = self._tasks.find_latest_done(str(host_ws))
+            if latest is None:
+                # also try relative workspace string as stored
+                latest = self._tasks.find_latest_done(task.get("workspace") or "")
+            if latest is not None:
+                latest_t = _as_task(latest)
+                art = latest_t.get("artifact")
+                if art:
+                    artifact = Path(art)
+        if artifact is None or not artifact.exists():
+            self._tasks.update(
+                tid,
+                status="error",
+                error="no deployable artifact (pass artifact= or build first)",
+            )
+            return
+        try:
+            result = deploy_local(host_ws, artifact)
+        except Exception as exc:
+            self._tasks.update(tid, status="error", error=str(exc))
+            return
+        self._tasks.update(
+            tid,
+            status="done",
+            artifact=result["deployed_path"],
+            logs=f"deployed {result['source']} → {result['deployed_path']}\n",
+        )
+
     def _prepare(self, host_ws: Path, target: str) -> tuple[str, list[str]]:
         host_ws.mkdir(parents=True, exist_ok=True)
         if target == "pdf":
@@ -194,12 +231,12 @@ class BuildWorker:
                 msg = "no LaTeX source or presentation.ir.json in workspace"
                 raise ValueError(msg)
             return LATEX_IMAGE, ["pdf"]
-        if target == "web":
+        if target in {"web", "web-pdf"}:
             src = ensure_web_source(host_ws)
             if src is None:
                 msg = "no web source or presentation.ir.json in workspace"
                 raise ValueError(msg)
-            return WEB_IMAGE, ["web"]
+            return WEB_IMAGE, [target]
         msg = f"unsupported target: {target}"
         raise ValueError(msg)
 
