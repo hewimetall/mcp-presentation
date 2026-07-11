@@ -1,0 +1,19 @@
+[package]
+name = "mcp-docker"
+version = "0.1.0"
+edition = "2021"
+description = "ContainerRuntime port with BollardDockerAdapter — no docker CLI"
+license = "MIT"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.29", features = ["extension-module"] }
+bollard = "0.18"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+futures-util = "0.3"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
