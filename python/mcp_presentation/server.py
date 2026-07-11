@@ -12,15 +12,17 @@ from typing import cast
 from fastmcp import Context, FastMCP
 from fastmcp.dependencies import Progress
 from fastmcp.server.tasks import TaskConfig
+from fastmcp.tools import ToolResult
 from fastmcp.utilities.types import Image
 
 from mcp_git import GitService
 from mcp_presentation._tasks import TaskStore
+from mcp_presentation.deploy import DEPLOY_NOTE
 from mcp_presentation.ir_compile import IR_FILENAME, write_ir
 from mcp_presentation.ir_models import validate_ir_obj
 from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
 from mcp_presentation.settings import BUILD_TARGETS
-from mcp_presentation.slide_image import get_slide_png, slide_indices
+from mcp_presentation.slide_image import SLIDE_INDEX_NOTE, get_slide_png, slide_indices
 from mcp_presentation.task_bridge import await_sqlite_task
 from mcp_presentation.types import (
     BuildPresentationResult,
@@ -56,6 +58,7 @@ from mcp_presentation.types import (
     SessionRow,
     SessionsList,
     SetActiveWorkspaceResult,
+    SlideImageOk,
     TaskRow,
     WorkspaceCreated,
     WorkspaceRemoved,
@@ -244,7 +247,12 @@ def checkout_workspace(
         git_fail: ErrorGit = {"error": "git_error", "detail": str(exc)}
         return git_fail
 
-    state_wid = get_state().create_workspace(project_id, abs_wt, ref_name=ref_name or None)
+    state_wid = get_state().create_workspace(
+        project_id,
+        abs_wt,
+        ref_name=ref_name or None,
+        workspace_id=wid,
+    )
     get_state().set_active_workspace(session_id, state_wid)
     result: CheckoutResult = {
         "workspace_id": state_wid,
@@ -253,6 +261,7 @@ def checkout_workspace(
         "ref_name": ref_name or "main",
         "bare_path": str(bare.resolve()),
         "session_id": session_id,
+        "note": (f"workspace_id is the on-disk folder name under workspaces/; path={abs_wt}"),
     }
     return result
 
@@ -331,7 +340,15 @@ def save_presentation_ir(session_id: str, ir_json: str) -> SaveIrResult:
         bad: ErrorInvalidIr = {"error": "invalid_ir", "detail": str(exc)}
         return bad
     path = write_ir(Path(ws["path"]), ir)
-    saved: IrSaved = {"path": str(path), "workspace_id": ws["workspace_id"]}
+    saved: IrSaved = {
+        "path": str(path),
+        "workspace_id": ws["workspace_id"],
+        "rebuild_required": True,
+        "note": (
+            "IR updated — existing out/slides/*.png and build artifacts are stale. "
+            "Call build_presentation (pdf|web|web-pdf) to refresh images."
+        ),
+    }
     return saved
 
 
@@ -386,28 +403,29 @@ async def build_presentation(
     ctx: Context | None = None,
     progress: Progress = _PROGRESS,
 ) -> BuildPresentationResult:
-    """Build for the active workspace.
+    """Build for the active workspace and wait until SQLite task is terminal.
 
-    Without MCP ``task=True``: enqueue into SQLite and return ``{task_id, queued}``.
-    With ``task=True``: wait on that same SQLite row and push status notifications
-    (``notifications/tasks/status`` via Progress) until ``done`` / ``error``.
+    Always waits on our TaskStore (no client-side get_build_status loop).
+    With MCP ``task=True``, also pushes ``notifications/tasks/status`` via Progress.
     """
+    _ = ctx
     queued = enqueue_build(session_id, target)
     if "error" in queued:
         return queued
-    if ctx is None or not ctx.is_background_task:
-        return queued
     tid = str(queued["task_id"])
-    await progress.set_total(3)
-    await progress.set_message(f"task_id={tid} status=queued")
-    row = await await_sqlite_task(get_tasks(), tid, progress)
-    await progress.increment(3)
+    reporter = progress if getattr(progress, "_impl", None) is not None else None
+    if reporter is not None:
+        await reporter.set_total(3)
+        await reporter.set_message(f"task_id={tid} status=queued")
+    row = await await_sqlite_task(get_tasks(), tid, reporter)
+    if reporter is not None:
+        await reporter.increment(3)
     return row
 
 
 @mcp.tool()
 def get_build_status(task_id: str) -> GetBuildStatusResult:
-    """Read build/deploy task status from the tasks SQLite store."""
+    """Inspect a SQLite build/deploy row (optional; build/deploy already wait)."""
     row = get_tasks().get(task_id)
     if row is None:
         missing: ErrorTaskNotFound = {"error": "not_found", "task_id": task_id}
@@ -416,17 +434,18 @@ def get_build_status(task_id: str) -> GetBuildStatusResult:
 
 
 @mcp.tool()
-def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
+def get_slide_image(session_id: str, slide: int) -> ToolResult | GetSlideImageResult:
     """Return PNG for one already-built slide (1-based). Does not build.
 
-    Slide PNGs are written/refreshed by ``build_presentation`` for
-    ``pdf`` / ``web`` / ``web-pdf`` (and optional ``slide-image``).
+    Indexing: slide 1 = title; IR content slides start at 2.
+    Success includes structured JSON (path, available, index_note) plus image bytes.
     """
     resolved = _active_workspace(session_id)
     if isinstance(resolved, dict):
         return resolved
     _, ws_d = resolved
     host_ws = Path(ws_d["path"]).resolve()
+    available = slide_indices(host_ws)
     try:
         path = get_slide_png(host_ws, slide)
     except ValueError as exc:
@@ -434,7 +453,7 @@ def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
             "error": "invalid_slide",
             "slide": slide,
             "detail": str(exc),
-            "available": slide_indices(host_ws),
+            "available": available,
         }
         return bad
     except FileNotFoundError as exc:
@@ -448,10 +467,20 @@ def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
             "error": "invalid_slide",
             "slide": slide,
             "detail": str(exc),
-            "available": slide_indices(host_ws),
+            "available": available,
         }
         return missing_slide
-    return Image(path=str(path), format="png")
+    ok: SlideImageOk = {
+        "slide": slide,
+        "path": str(path),
+        "available": available,
+        "index_note": SLIDE_INDEX_NOTE,
+        "format": "png",
+    }
+    return ToolResult(
+        content=[Image(path=str(path), format="png")],
+        structured_content=dict(ok),
+    )
 
 
 def enqueue_deploy(session_id: str, artifact: str = "") -> DeployPresentationResult:
@@ -486,6 +515,8 @@ def enqueue_deploy(session_id: str, artifact: str = "") -> DeployPresentationRes
         "status": "queued",
         "target": "deploy",
         "artifact": art,
+        "deploy_kind": "local_copy",
+        "note": DEPLOY_NOTE,
     }
     return queued
 
@@ -497,21 +528,22 @@ async def deploy_presentation(
     ctx: Context | None = None,
     progress: Progress = _PROGRESS,
 ) -> DeployPresentationResult:
-    """Deploy an artifact for the active workspace.
+    """Local-copy deploy (not a URL). Waits on the SQLite task until done/error.
 
-    Same contract as ``build_presentation``: immediate call enqueues; MCP
-    ``task=True`` waits on the SQLite task and emits status notifications.
+    With MCP ``task=True``, also emits status notifications.
     """
+    _ = ctx
     queued = enqueue_deploy(session_id, artifact)
     if "error" in queued:
         return queued
-    if ctx is None or not ctx.is_background_task:
-        return queued
     tid = str(queued["task_id"])
-    await progress.set_total(3)
-    await progress.set_message(f"task_id={tid} status=queued")
-    row = await await_sqlite_task(get_tasks(), tid, progress)
-    await progress.increment(3)
+    reporter = progress if getattr(progress, "_impl", None) is not None else None
+    if reporter is not None:
+        await reporter.set_total(3)
+        await reporter.set_message(f"task_id={tid} status=queued")
+    row = await await_sqlite_task(get_tasks(), tid, reporter)
+    if reporter is not None:
+        await reporter.increment(3)
     return row
 
 

@@ -58,11 +58,22 @@ class CheckoutResult(TypedDict):
     ref_name: str
     bare_path: str
     session_id: str
+    note: str
 
 
 class IrSaved(TypedDict):
     path: str
     workspace_id: str
+    rebuild_required: Literal[True]
+    note: str
+
+
+class SlideImageOk(TypedDict):
+    slide: int
+    path: str
+    available: list[int]
+    index_note: str
+    format: Literal["png"]
 
 
 class CommitResult(TypedDict):
@@ -82,6 +93,8 @@ class DeployQueued(TypedDict):
     status: Literal["queued"]
     target: Literal["deploy"]
     artifact: str | None
+    deploy_kind: Literal["local_copy"]
+    note: str
 
 
 class WorkspaceRemoved(TypedDict):
@@ -180,7 +193,8 @@ DeployPresentationResult = (
     | ErrorNoArtifact
 )
 GetSlideImageResult = (
-    ErrorSessionNotFound
+    SlideImageOk
+    | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
     | ErrorInvalidSlide

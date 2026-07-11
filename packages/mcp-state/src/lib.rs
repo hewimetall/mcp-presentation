@@ -171,14 +171,19 @@ impl StateStore {
     }
 
     /// Register a workspace checkout (metadata only; git worktree is separate).
-    #[pyo3(signature = (project_id, path, ref_name=None))]
+    /// If `workspace_id` is provided, it is stored as-is (must match the on-disk dir name).
+    #[pyo3(signature = (project_id, path, ref_name=None, workspace_id=None))]
     fn create_workspace(
         &self,
         project_id: &str,
         path: &str,
         ref_name: Option<&str>,
+        workspace_id: Option<&str>,
     ) -> PyResult<String> {
-        let wid = Uuid::new_v4().to_string();
+        let wid = match workspace_id {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => Uuid::new_v4().to_string(),
+        };
         let ts = now_secs();
         let conn = self.conn.lock();
         conn.execute(

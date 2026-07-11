@@ -9,6 +9,7 @@ from pathlib import Path
 
 from mcp_presentation.engines.runtime import (
     ContainerRunner,
+    RunResult,
     as_run_result,
     host_user,
     require_exit_ok,
@@ -26,7 +27,7 @@ def _ensure_marp_or_web(workspace: Path) -> Path:
     return src
 
 
-def _run(workspace: Path, runner: ContainerRunner, cmd: str) -> None:
+def _run(workspace: Path, runner: ContainerRunner, cmd: str) -> RunResult:
     workspace.mkdir(parents=True, exist_ok=True)
     raw = runner.run(
         WEB_IMAGE,
@@ -36,35 +37,37 @@ def _run(workspace: Path, runner: ContainerRunner, cmd: str) -> None:
         auto_remove=True,
         user=host_user(),
     )
-    require_exit_ok(as_run_result(raw), label=f"web/{cmd}")
+    result = as_run_result(raw)
+    require_exit_ok(result, label=f"web/{cmd}")
+    return result
 
 
-def build_web(workspace: Path, runner: ContainerRunner) -> Path:
-    """Build static site → ``dist/`` and refresh slide PNGs."""
+def build_web(workspace: Path, runner: ContainerRunner) -> tuple[Path, str]:
+    """Build static site → ``dist/`` and refresh slide PNGs. Returns (artifact, logs)."""
     _ensure_marp_or_web(workspace)
-    _run(workspace, runner, "web")
+    result = _run(workspace, runner, "web")
     artifact = workspace / "dist"
     if not artifact.exists():
         msg = f"missing artifact {artifact}"
         raise RuntimeError(msg)
     require_slide_pngs(workspace)
-    return artifact
+    return artifact, str(result.get("logs", ""))
 
 
-def build_web_pdf(workspace: Path, runner: ContainerRunner) -> Path:
-    """Build deck PDF → ``out/web.pdf`` and refresh slide PNGs."""
+def build_web_pdf(workspace: Path, runner: ContainerRunner) -> tuple[Path, str]:
+    """Build deck PDF → ``out/web.pdf`` and refresh slide PNGs. Returns (artifact, logs)."""
     _ensure_marp_or_web(workspace)
-    _run(workspace, runner, "web-pdf")
+    result = _run(workspace, runner, "web-pdf")
     artifact = workspace / "out" / "web.pdf"
     if not artifact.is_file():
         msg = f"missing artifact {artifact}"
         raise RuntimeError(msg)
     require_slide_pngs(workspace)
-    return artifact
+    return artifact, str(result.get("logs", ""))
 
 
-def build_slide_images(workspace: Path, runner: ContainerRunner) -> Path:
-    """Images-only refresh → ``out/slides/`` (same layout as full web builds)."""
+def build_slide_images(workspace: Path, runner: ContainerRunner) -> tuple[Path, str]:
+    """Images-only refresh → ``out/slides/``. Returns (slides_dir, logs)."""
     _ensure_marp_or_web(workspace)
-    _run(workspace, runner, "slide-image")
-    return require_slide_pngs(workspace)
+    result = _run(workspace, runner, "slide-image")
+    return require_slide_pngs(workspace), str(result.get("logs", ""))

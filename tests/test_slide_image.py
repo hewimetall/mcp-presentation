@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from fastmcp.utilities.types import Image
+from fastmcp.tools import ToolResult
 
 pytest.importorskip("mcp_presentation._tasks")
 pytest.importorskip("mcp_git._native")
@@ -118,7 +118,12 @@ def test_get_slide_image_after_web_build() -> None:
     assert server.get_build_status(queued["task_id"])["status"] == "done"
 
     img = server.get_slide_image(sid, 1)
-    assert isinstance(img, Image)
+    assert isinstance(img, ToolResult)
+    assert img.structured_content is not None
+    assert img.structured_content["path"]
+    assert img.structured_content["available"]
+    assert "title" in img.structured_content["index_note"].lower()
+    assert any(getattr(c, "type", None) == "image" for c in img.content)
     bad = server.get_slide_image(sid, 99)
     assert isinstance(bad, dict)
     assert bad["error"] == "invalid_slide"

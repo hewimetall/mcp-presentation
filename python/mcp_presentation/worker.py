@@ -108,11 +108,12 @@ class BuildWorker:
         try:
             if (host_ws / "presentation.ir.json").is_file():
                 load_ir(host_ws)
-            self._tasks.update(tid, logs=f"build target={target}\n")
+            header = f"build target={target}\n"
+            self._tasks.update(tid, logs=header)
             if target in WEB_TARGETS:
-                artifact = run_web_target(host_ws, target, self._runner)
+                artifact, container_logs = run_web_target(host_ws, target, self._runner)
             elif target == "pdf":
-                artifact = self._build_pdf(host_ws)
+                artifact, container_logs = self._build_pdf(host_ws)
             else:
                 msg = f"unsupported target: {target}"
                 raise ValueError(msg)
@@ -120,13 +121,15 @@ class BuildWorker:
             self._tasks.update(tid, status="error", error=str(exc), logs=str(exc))
             return
 
+        logs = f"{header}--- container ---\n{container_logs}".rstrip() + "\n"
         self._tasks.update(
             tid,
             status="done",
             artifact=str(artifact),
+            logs=logs,
         )
 
-    def _build_pdf(self, host_ws: Path) -> Path:
+    def _build_pdf(self, host_ws: Path) -> tuple[Path, str]:
         """LaTeX PDF path stays in the worker (no separate latex engine module)."""
         host_ws.mkdir(parents=True, exist_ok=True)
         src = ensure_latex_source(host_ws)
@@ -141,13 +144,14 @@ class BuildWorker:
             auto_remove=True,
             user=host_user(),
         )
-        require_exit_ok(as_run_result(raw), label="pdf")
+        result = as_run_result(raw)
+        require_exit_ok(result, label="pdf")
         artifact = host_ws / "out" / "main.pdf"
         if not artifact.is_file():
             msg = f"missing artifact {artifact}"
             raise RuntimeError(msg)
         require_slide_pngs(host_ws)
-        return artifact
+        return artifact, str(result.get("logs", ""))
 
     def _run_deploy(self, tid: str, task: TaskRow, host_ws: Path) -> None:
         artifact_s = task.get("artifact")
@@ -177,7 +181,11 @@ class BuildWorker:
             tid,
             status="done",
             artifact=result["deployed_path"],
-            logs=f"deployed {result['source']} → {result['deployed_path']}\n",
+            logs=(
+                f"deploy_kind=local_copy (not a URL)\n"
+                f"{result['note']}\n"
+                f"{result['source']} → {result['deployed_path']}\n"
+            ),
         )
 
     @property

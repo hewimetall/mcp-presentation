@@ -25,14 +25,15 @@ create_session
   → checkout_workspace(session_id, project_id)   # gix worktree + state
   → save_presentation_ir(session_id, ir_json)    # Pydantic validate
   → commit_workspace(session_id, …)
-  → build_presentation(..., task=True)           # waits SQLite task + status notifications
-  → get_slide_image(session_id, slide=1)         # read PNG only (after build)
-  → deploy_presentation(..., task=True)
+  → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # waits; refreshes out/slides/
+  → get_slide_image(session_id, slide=1)  # 1=title; JSON: path/available/index_note + Image
+  → deploy_presentation(session_id)      # local_copy under out/deployed/ (not a URL)
 ```
 
-Immediate (no MCP task) still returns `{task_id, status: "queued"}`; inspect with
-`get_build_status(task_id)`. Preferred client UX: FastMCP `call_tool(..., task=True)`
-then `await task.result()` / `on_status_change` — same SQLite `task_id` (ADR-0003).
+`save_presentation_ir` returns `rebuild_required: true` — slide PNGs stay stale until rebuild.
+`workspace_id` equals the folder name under `workspaces/`.
+Preferred wait UX: tool itself waits (and with MCP `task=True` also pushes status notifications).
+`get_build_status` remains for inspection only.
 
 Пример IR: [`examples/demo/presentation.ir.json`](examples/demo/presentation.ir.json)  
 JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.schema.json)

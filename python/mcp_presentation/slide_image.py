@@ -7,6 +7,11 @@ from pathlib import Path
 
 _SLIDE_RE = re.compile(r"^slide\.(\d+)\.png$", re.IGNORECASE)
 
+SLIDE_INDEX_NOTE = (
+    "1-based index: slide 1 is the title slide; IR content slides start at 2 "
+    "(IR slides[0] → image 2)."
+)
+
 
 def slides_dir(workspace: Path) -> Path:
     return workspace / "out" / "slides"

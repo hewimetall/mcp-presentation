@@ -40,10 +40,10 @@
 | `set_active_workspace` | bind session → workspace |
 | `save_presentation_ir` | validate + write `presentation.ir.json` |
 | `commit_workspace` | gix commit of listed paths |
-| `build_presentation` | enqueue SQLite; with MCP `task=True` wait + status notifications |
-| `get_build_status` | inspect SQLite task row |
-| `get_slide_image` | PNG одного **готового** слайда; без сборки (после pdf/web) |
-| `deploy_presentation` | enqueue deploy; with MCP `task=True` wait + notifications |
+| `build_presentation` | wait on SQLite task (optional MCP `task=True` notifications) |
+| `get_build_status` | inspect SQLite row (optional) |
+| `get_slide_image` | PNG + structured `{path, available, index_note}` (1=title) |
+| `deploy_presentation` | wait; local_copy under `out/deployed/` (not a URL) |
 
 ## Task statuses
 
