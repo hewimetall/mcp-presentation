@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Protocol
 
 
@@ -14,11 +15,17 @@ class ContainerRunner(Protocol):
         workdir: str | None = None,
         env: list[str] | None = None,
         auto_remove: bool = True,
+        user: str | None = None,
     ) -> object: ...
 
 
 class RunResult(dict[str, str | int]):
     """Mapping returned by adapters / fakes: status_code, logs, container_id."""
+
+
+def host_user() -> str:
+    """uid:gid so bind-mounted build outputs stay host-writable."""
+    return f"{os.getuid()}:{os.getgid()}"
 
 
 def as_run_result(raw: object) -> RunResult:

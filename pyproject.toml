@@ -88,3 +88,7 @@ ignore_missing_imports = true
 module = ["mcp_presentation.ir_models"]
 disallow_any_explicit = false
 disallow_any_generics = false
+[tool.pytest.ini_options]
+markers = [
+    "docker: tests that need a Docker daemon and builder images",
+]

@@ -7,7 +7,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mcp_presentation.engines.runtime import ContainerRunner, as_run_result, require_exit_ok
+from mcp_presentation.engines.runtime import (
+    ContainerRunner,
+    as_run_result,
+    host_user,
+    require_exit_ok,
+)
 from mcp_presentation.ir_compile import ensure_web_source
 from mcp_presentation.settings import CONTAINER_WORK, WEB_IMAGE, workspace_bind
 from mcp_presentation.slide_image import require_slide_pngs
@@ -29,6 +34,7 @@ def _run(workspace: Path, runner: ContainerRunner, cmd: str) -> None:
         binds=[workspace_bind(workspace)],
         workdir=CONTAINER_WORK,
         auto_remove=True,
+        user=host_user(),
     )
     require_exit_ok(as_run_result(raw), label=f"web/{cmd}")
 

@@ -38,8 +38,9 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error \
   "${TEX}"
 
 # Normalize artifact name for TaskStore
-if [[ -f "${OUT}/${TEX%.tex}.pdf" ]]; then
-  cp -f "${OUT}/${TEX%.tex}.pdf" "${OUT}/main.pdf"
+src_pdf="${OUT}/${TEX%.tex}.pdf"
+if [[ -f "${src_pdf}" && "${src_pdf}" != "${OUT}/main.pdf" ]]; then
+  cp -f "${src_pdf}" "${OUT}/main.pdf"
 fi
 
 if [[ ! -f "${OUT}/main.pdf" ]]; then

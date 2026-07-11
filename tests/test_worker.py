@@ -35,8 +35,10 @@ class FakeRunner:
         workdir: str | None = None,
         env: list[str] | None = None,
         auto_remove: bool = True,
+        user: str | None = None,
     ) -> RunResult:
         self.calls.append((image, cmd, list(binds or [])))
+        _ = (workdir, env, auto_remove, user)
         if binds:
             host = binds[0].split(":", 1)[0]
             out = Path(host) / "out"

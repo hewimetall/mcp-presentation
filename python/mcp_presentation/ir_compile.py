@@ -29,33 +29,33 @@ def write_ir(workspace: Path, ir: PresentationIr) -> Path:
 
 
 def ensure_latex_source(workspace: Path) -> Path | None:
-    """Return existing .tex or generate main.tex from IR. None if nothing to build."""
+    """IR is source of truth when present; else use native .tex. None if nothing."""
+    ir = load_ir(workspace)
+    if ir is not None:
+        tex = workspace / "main.tex"
+        tex.write_text(_ir_to_beamer(ir), encoding="utf-8")
+        return tex
     for name in ("main.tex", "presentation.tex", "slides.tex"):
         p = workspace / name
         if p.is_file():
             return p
-    ir = load_ir(workspace)
-    if ir is None:
-        return None
-    tex = workspace / "main.tex"
-    tex.write_text(_ir_to_beamer(ir), encoding="utf-8")
-    return tex
+    return None
 
 
 def ensure_web_source(workspace: Path) -> Path | None:
-    """Return existing web entry or generate slides.md from IR."""
+    """IR is source of truth when present; else package.json / Marp markdown."""
+    ir = load_ir(workspace)
+    if ir is not None:
+        md = workspace / "slides.md"
+        md.write_text(_ir_to_marp(ir), encoding="utf-8")
+        return md
     if (workspace / "package.json").is_file():
         return workspace / "package.json"
     for name in ("slides.md", "presentation.md", "index.md", "deck.md"):
         p = workspace / name
         if p.is_file():
             return p
-    ir = load_ir(workspace)
-    if ir is None:
-        return None
-    md = workspace / "slides.md"
-    md.write_text(_ir_to_marp(ir), encoding="utf-8")
-    return md
+    return None
 
 
 def _escape_tex(text: str) -> str:

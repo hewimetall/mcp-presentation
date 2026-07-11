@@ -11,7 +11,7 @@ from typing import cast
 from mcp_presentation._tasks import TaskStore
 from mcp_presentation.deploy import deploy_local
 from mcp_presentation.engines import ContainerRunner, run_web_target
-from mcp_presentation.engines.runtime import as_run_result, require_exit_ok
+from mcp_presentation.engines.runtime import as_run_result, host_user, require_exit_ok
 from mcp_presentation.ir_compile import ensure_latex_source, load_ir
 from mcp_presentation.settings import (
     BUILD_TARGETS,
@@ -139,6 +139,7 @@ class BuildWorker:
             binds=[workspace_bind(host_ws)],
             workdir=CONTAINER_WORK,
             auto_remove=True,
+            user=host_user(),
         )
         require_exit_ok(as_run_result(raw), label="pdf")
         artifact = host_ws / "out" / "main.pdf"
