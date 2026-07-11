@@ -1,0 +1,14 @@
+/target/
+**/*.so
+**/*.dylib
+**/*.dll
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+.pytest_cache/
+state/
+workspaces/
+projects/
+*.db
+*.db-*

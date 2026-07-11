@@ -4,19 +4,18 @@ MCP-сервер для сборки презентаций (**PDF** / **web**) 
 
 ## Стек
 
-- **Python 3.14**
-- **FastMCP** — MCP tools
-- **SQLAlchemy** + embedded **SQLite** — persistent task store (`state/tasks.db`)
+- **Python 3.14** + **FastMCP** — MCP tools
+- **Rust / PyO3** (`rusqlite`) — TaskStore, embedded SQLite (`state/tasks.db`)
+- **maturin** — сборка native extension
 
 ## Решения
 
-Архитектурные решения (IR, deploy, Docker, git worktree, отказ от Docket/Redis):  
 → [`docs/architecture/DECISIONS.md`](docs/architecture/DECISIONS.md)
 
 ## Состояние на диске
 
 ```text
-state/tasks.db           # SQLite: задачи сборки
+state/tasks.db           # SQLite: только через Rust TaskStore
 projects/<id>.git/       # git bare — истина
 workspaces/<ws_id>/      # git worktree checkout
 ```

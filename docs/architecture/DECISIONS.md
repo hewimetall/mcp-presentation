@@ -1,7 +1,7 @@
 # Architecture Decisions — mcp-presentation
 
-Статус: **решения зафиксированы** (итерация после D3.1 + выбор стека).  
-Стек: **Python 3.14 · FastMCP · SQLAlchemy · embedded SQLite**.
+Статус: **решения зафиксированы** (итерация: Rust/PyO3 task-слой).  
+Стек: **Python 3.14 · FastMCP · Rust (PyO3) · rusqlite · embedded SQLite**.
 
 ---
 
@@ -11,8 +11,9 @@
 |---|------|---------|
 | D3 | Async-сборка | Task-based: MCP не блокируется на билде |
 | **D3.1** | Task-хранилище | **Embedded SQLite** (`state/tasks.db`), persistent |
-| **D3.2** | Очередь исполнения | **Свой worker** (asyncio + SQLAlchemy), **не** FastMCP Docket |
-| **D16** | Runtime-стек | Python 3.14 + FastMCP + SQLAlchemy 2.x + Pydantic |
+| **D3.2** | Очередь / Docket | **Не** FastMCP Docket (только memory/Redis) |
+| **D3.3** | Task API | **Rust + PyO3** (`rusqlite`, WAL); Python только вызывает |
+| **D16** | Runtime-стек | Python 3.14 + FastMCP + **maturin/PyO3** + Pydantic (**без SQLAlchemy**) |
 | **Q1→D17** | IR-формат | **JSON Schema / Pydantic** как канон; Markdown — опциональный authoring |
 | **Q3→D18** | Deploy | **Отдельный target/tool**, не post-build |
 | **Q5→D19** | Docker | **DooD** (host socket) по умолчанию; rootless — preferred prod |
@@ -22,9 +23,7 @@
 
 ---
 
-## Уже зафиксировано ранее
-
-### D3 / D3.1 — Task-хранилище = embedded SQLite
+## D3 / D3.1 — Task-хранилище = embedded SQLite
 
 - Долгий билд не блокирует MCP: `build_presentation` → `task_id`, статус через `get_build_status`.
 - Persistent: задачи переживают рестарт (как workspace, D14).
@@ -33,7 +32,7 @@
 
 ```
 state/
-├── tasks.db              # SQLite: задачи сборки (persistent)
+├── tasks.db              # SQLite: задачи (владелец — Rust TaskStore)
 projects/
 └── <project_id>.git/     # git bare — истина
 workspaces/
@@ -44,171 +43,164 @@ workspaces/
 
 ## D3.2 — Почему не FastMCP Background Tasks (Docket)
 
-Исследование FastMCP 3.4.x ([Background Tasks](https://gofastmcp.com/servers/tasks.md)):
-
 | Backend Docket | Persistent | Внешняя зависимость | Совместим с D3.1 |
 |----------------|------------|---------------------|------------------|
-| `memory://` (default) | нет | нет | **нет** — теряется при рестарте |
-| `redis://` / Valkey | да | Redis/Valkey | **нет** — Redis снят осознанно |
+| `memory://` (default) | нет | нет | **нет** |
+| `redis://` / Valkey | да | Redis/Valkey | **нет** |
 | SQLite | — | — | **не существует** |
 
-Docket (pydocket) заточен под Redis Streams; in-memory — только для тестов/dev.
+FastMCP = MCP-слой (`@mcp.tool`), без `task=True` / Docket для build pipeline.
 
-**Решение:** durable state и очередь билдов — **наша** модель на SQLAlchemy/SQLite.  
-FastMCP используем как MCP-слой (`@mcp.tool`), без `task=True` / Docket для build pipeline.
+---
 
-MCP-контракт остаётся тем же:
+## D3.3 — Task-слой через Rust / PyO3
 
-```text
-build_presentation(session_id, target) → { task_id }
-get_build_status(task_id)              → row из SQLite
+### Решение
+
+**Вся работа с задачами** (schema, submit, update, get, claim) живёт в **Rust-расширении** на PyO3, SQLite через **`rusqlite` (feature `bundled`)**.
+
+| Слой | Технология | Роль |
+|------|------------|------|
+| MCP tools | FastMCP (Python) | тонкая обёртка: принять args → вызвать Rust → вернуть dict |
+| TaskStore | **Rust + PyO3** | единственный writer/owner `state/tasks.db` |
+| SQLite | **rusqlite + bundled** | WAL, busy_timeout, миграции; без системного libsqlite |
+| Build worker | Python (или позже Rust) | claim через PyO3 → `docker run` → update status |
+| IR / validation | Pydantic (Python) | не путать с task DB |
+
+### Почему не SQLAlchemy
+
+| | SQLAlchemy (снято для tasks) | Rust / PyO3 + rusqlite |
+|--|------------------------------|-------------------------|
+| Владение схемой | Python ORM | один native owner |
+| GIL на claim/update | да | короткое удержание GIL / можно `allow_threads` |
+| Зависимости | ORM + aiosqlite | один `.so` + bundled SQLite |
+| Согласованность с «embedded» | ок | ок + быстрее критический путь очереди |
+
+SQLAlchemy **не** входит в стек v1. Сырой `sqlite3` из черновика D3.1 тоже не используем — только через Rust.
+
+### Python API (контракт)
+
+```python
+from mcp_presentation._tasks import TaskStore
+
+store = TaskStore("state/tasks.db")          # создаёт схему, включает WAL
+tid = store.submit(session_id, workspace, target)  # → str
+store.update(tid, status="running", logs="...")
+row = store.get(tid)                         # → dict | None
+nxt = store.claim_next()                     # atomic queued→running | None
+```
+
+### Rust surface (эскиз)
+
+```rust
+#[pyclass]
+struct TaskStore {
+    conn: Mutex<Connection>,
+}
+
+#[pymethods]
+impl TaskStore {
+    #[new]
+    fn new(path: &str) -> PyResult<Self> { /* open, PRAGMA WAL, migrate */ }
+
+    fn submit(&self, session_id: &str, workspace: &str, target: &str) -> PyResult<String> { … }
+    fn update(&self, task_id: &str, /** kwargs */) -> PyResult<()> { … }
+    fn get(&self, task_id: &str) -> PyResult<Option<PyObject>> { … }
+    fn claim_next(&self) -> PyResult<Option<PyObject>> { … }
+}
+```
+
+Сборка: **maturin** (`pyproject.toml` build-backend = maturin), PyO3 **≥ 0.25** (поддержка CPython 3.14; актуальный 0.29.x).  
+`rusqlite` с `features = ["bundled"]` — без внешней libsqlite3.
+
+### Схема (владеет Rust)
+
+```sql
+CREATE TABLE IF NOT EXISTS tasks (
+    task_id     TEXT PRIMARY KEY,
+    session_id  TEXT,
+    workspace   TEXT,
+    target      TEXT,          -- 'pdf' | 'web' | 'deploy'
+    status      TEXT,          -- 'queued'|'running'|'done'|'error'
+    artifact    TEXT,
+    logs        TEXT,
+    error       TEXT,
+    created_at  INTEGER,
+    updated_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_created
+  ON tasks(status, created_at);
+```
+
+`claim_next`: одна транзакция `SELECT … WHERE status='queued' ORDER BY created_at LIMIT 1` + `UPDATE … status='running'` (или `UPDATE … RETURNING` на подходящем SQLite).
+
+### Связь с MCP
+
+```python
+@mcp.tool()
+def build_presentation(session_id: str, target: str) -> dict:
+    ws = sessions[session_id].active_workspace
+    tid = store.submit(session_id, ws, target)
+    wake_worker()
+    return {"task_id": tid}
+
+@mcp.tool()
+def get_build_status(task_id: str) -> dict:
+    row = store.get(task_id)
+    if row is None:
+        return {"error": "not_found", "task_id": task_id}
+    return row
 ```
 
 ---
 
-## D16 — Стек: Python 3.14 + FastMCP + SQLAlchemy
+## D16 — Стек (обновлён)
 
 | Компонент | Выбор | Зачем |
 |-----------|-------|-------|
-| Runtime | **Python 3.14** | Запрос продукта; asyncio introspection (`python -m asyncio ps`) полезен для worker’ов |
-| MCP | **FastMCP ≥ 3.4.4** | Стандарт для Python MCP; sync tools в threadpool; чистые tool-схемы |
-| ORM / SQL | **SQLAlchemy 2.0** (+ **aiosqlite** для async) | Типизированные модели Task; WAL; миграции позже через Alembic |
-| Validation | **Pydantic v2** | IR + tool I/O; уже в зависимостях FastMCP |
-| DB file | `sqlite+aiosqlite:///state/tasks.db` | Embedded, WAL |
+| Runtime | **Python 3.14** | продуктовый выбор |
+| MCP | **FastMCP ≥ 3.4.4** | tools / schemas |
+| Tasks | **Rust + PyO3 + rusqlite** | durable queue, D3.1 |
+| Build | **maturin** | wheel с native extension |
+| Validation | **Pydantic v2** | IR + tool I/O |
+| DB file | `state/tasks.db` | только через Rust TaskStore |
 
-### Важные нюансы стека
+**Не используем:** SQLAlchemy, aiosqlite, FastMCP Docket/Redis для задач.
 
-1. **FastMCP classifiers** на PyPI сейчас до 3.13; 3.14 уже используется в экосистеме. Фиксируем `fastmcp>=3.4.4` (есть фикс `asyncio.iscoroutinefunction` DeprecationWarning на 3.14). CI обязан гонять 3.14.
-2. **SQLAlchemy + SQLite file**: по умолчанию `QueuePool` и `check_same_thread=False` — ок для MCP + background worker в одном процессе.
-3. **WAL** обязателен при старте:
+Нюансы:
 
-```python
-from sqlalchemy import event, create_engine
-
-engine = create_engine(
-    "sqlite+aiosqlite:///state/tasks.db",
-    connect_args={"timeout": 30},
-)
-
-@event.listens_for(engine.sync_engine, "connect")
-def _sqlite_pragma(dbapi_conn, _):
-    cur = dbapi_conn.cursor()
-    cur.execute("PRAGMA journal_mode=WAL")
-    cur.execute("PRAGMA busy_timeout=30000")
-    cur.execute("PRAGMA foreign_keys=ON")
-    cur.close()
-```
-
-4. **Писатели**: один in-process worker сериализует обновления статусов (SQLite = один writer). MCP только читает / вставляет `queued`.
-5. Сырой `sqlite3` из черновика D3.1 **заменяем** на SQLAlchemy-модели — тот же файл БД, другой API.
-
-### Модель Task (SQLAlchemy)
-
-```python
-class Task(Base):
-    __tablename__ = "tasks"
-
-    task_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    session_id: Mapped[str | None]
-    workspace: Mapped[str | None]
-    target: Mapped[str]          # 'pdf' | 'web' | 'deploy'
-    status: Mapped[str]          # queued|running|done|error
-    artifact: Mapped[str | None]
-    logs: Mapped[str | None]
-    error: Mapped[str | None]
-    created_at: Mapped[int]
-    updated_at: Mapped[int]
-```
+1. PyO3 ≥ 0.25 обязателен для 3.14; pin `pyo3 = "0.29"` (или новее).
+2. Worker и MCP делят один `TaskStore` (одно соединение под `Mutex`, или connection-per-call с WAL — выбрать в реализации; v1: `Mutex<Connection>`).
+3. Долгий `docker run` — **вне** Rust; Rust только claim/update статусов.
 
 ---
 
 ## Q1 → D17 — IR-формат: JSON Schema (канон)
 
-### Варианты
-
-| | Markdown | JSON Schema / Pydantic |
-|--|----------|-------------------------|
-| LLM-friendly authoring | отлично | хуже (больше «перевода») |
-| Валидация до рендера | слабая | строгая |
-| Два таргета (pdf + web) | неоднозначно | один контракт → два renderer’а |
-| Git diff | читаемый | читаемый при аккуратном dump |
-| Детерминизм сборки | низкий | высокий |
-
-### Решение: **канонический IR = JSON (Pydantic / JSON Schema)**
-
-- В git bare лежит **IR** (`presentation.ir.json` или эквивалент) — единственный вход в `pdf`/`web` pipeline.
-- Renderers (Typst/LaTeX/HTML — уточняется отдельно) потребляют **только** валидированный IR.
-- Markdown — **опциональный authoring-frontend** (MCP-tool `markdown_to_ir`), не source of truth для билда.
-
-Обоснование: два артефакта из одного источника требуют жёсткого контракта; агент уже говорит с tools через схемы — IR того же класса. Markdown оставляем как UX-слой, не как compile-input.
+**Канон = JSON (Pydantic / JSON Schema)** в git.  
+Markdown — опциональный authoring (`markdown_to_ir`), не вход рендереров.
 
 ---
 
 ## Q3 → D18 — Deploy: отдельный target
 
-### Варианты
-
-| | Post-build hook | Отдельный target `deploy` |
-|--|-----------------|---------------------------|
-| Успех build ≠ успех publish | смешивает статусы | раздельные `task_id` |
-| Секреты / сеть | тянет в каждый билд | только когда нужно |
-| Повторный publish того же артефакта | нет | да |
-| Агент контролирует шаг | неявно | явно |
-
-### Решение: **`deploy` — отдельный MCP-tool / target**
-
-```text
-build_presentation(..., target="web"|"pdf")  → artifact
-deploy_presentation(task_id | artifact, dest) → свой task_id
-```
-
-- Build всегда заканчивается локальным артефактом (`artifact` path в SQLite).
-- Deploy читает готовый артефакт, не пересобирает (если не передан `rebuild=true`).
-- Ошибки auth/CDN не помечают успешный build как `error`.
+`deploy_presentation` — отдельный tool/task `target='deploy'`, не post-build hook.
 
 ---
 
-## Q5 → D19 — Docker-модель: DooD (default)
+## Q5 → D19 — Docker: DooD (default)
 
-Контекст: MCP-хост запускает `docker run` для изолированной сборки (TeX/Node/и т.п.) с mount workspace.
-
-| | DooD (socket) | DinD | Rootless |
-|--|---------------|------|----------|
-| Простота | высокая | средняя | ниже |
-| Host-root при компромиссе | фактически да | через `--privileged` тоже | blast radius = unprivileged user |
-| Вложенность / perf | нативная | хуже | ок |
-| Совместимость с «ноль внешних сервисов» | да | да | да |
-
-### Решение
-
-1. **Default: DooD** — `/var/run/docker.sock` + `docker run --rm -v <workspace>:<workspace> ...`.
-2. **Preferred production: rootless Docker**, если доступен на хосте (тот же CLI-контракт).
-3. **DinD отклоняем** для v1: privileged, сложный storage, лишняя поверхность.
-
-Документировать в README: socket mount = доверие к содержимому workspace/образов на уровне host root.
+1. Default: DooD (`docker.sock`).
+2. Preferred prod: rootless.
+3. DinD — нет в v1.
 
 ---
 
 ## Q7 → D20 — Git checkout: worktree
 
-Уже есть bare в `projects/<project_id>.git`.
-
-| | `git clone` (полный) | `git worktree` |
-|--|----------------------|----------------|
-| Диск | полный object store × N | объекты в bare, файлы × N |
-| Fetch | по каждому clone | один bare |
-| Параллельные workspace | ок | ок + защита «ветка уже checked out» |
-| Согласованность с bare-истиной | дублирование | нативная |
-
-### Решение: **`git worktree add`** от bare
-
 ```text
 git --git-dir=projects/<id>.git worktree add workspaces/<ws_id> <ref>
 ```
-
-- `workspaces/<ws_id>` = active checkout для сессии.
-- Удаление workspace = `git worktree remove` (+ prune).
-- Не клонировать bare целиком в каждый workspace.
 
 ---
 
@@ -216,21 +208,19 @@ git --git-dir=projects/<id>.git worktree add workspaces/<ws_id> <ref>
 
 ```text
 ┌─────────────┐     tools      ┌──────────────────┐
-│ MCP Client  │ ─────────────► │ FastMCP server   │
-└─────────────┘                │  (Python 3.14)   │
-                               └────────┬─────────┘
-                                        │
-                    submit/get status   │  SQLAlchemy
+│ MCP Client  │ ─────────────► │ FastMCP (Python) │
+└─────────────┘                └────────┬─────────┘
+                                        │ PyO3
                                         ▼
                                ┌──────────────────┐
-                               │ state/tasks.db   │  WAL SQLite
+                               │ TaskStore (Rust) │  rusqlite WAL
+                               │ state/tasks.db   │
                                └────────┬─────────┘
-                                        │ claim queued
+                                        │ claim_next / update
                                         ▼
                                ┌──────────────────┐
                                │ Build worker     │
                                │  docker run      │  DooD / rootless
-                               │  (pdf|web)       │
                                └────────┬─────────┘
                                         │
               projects/*.git (bare) ──► worktree ──► workspaces/<ws>
@@ -243,29 +233,27 @@ git --git-dir=projects/<id>.git worktree add workspaces/<ws_id> <ref>
 
 | Tool | Роль |
 |------|------|
-| `build_presentation` | enqueue `pdf` \| `web` |
-| `get_build_status` | read SQLite |
+| `build_presentation` | enqueue через Rust `submit` |
+| `get_build_status` | Rust `get` |
 | `deploy_presentation` | enqueue `deploy` (D18) |
 | (позже) `markdown_to_ir` | authoring → IR (D17) |
 
 ---
 
-## Следующие шаги реализации (не решения)
+## Следующие шаги реализации
 
-1. Каркас пакета: `pyproject.toml` (requires-python `>=3.14`), FastMCP entrypoint, SQLAlchemy Task store.
-2. Worker loop: claim `queued` → `running` → docker → `done`/`error`.
-3. Черновик JSON Schema IR v0 + один pdf/web renderer-stub.
-4. Git worktree helpers вокруг bare.
-5. Документация threat model для DooD.
+1. Maturin/PyO3 crate `TaskStore` + схема + `submit/get/update/claim_next`.
+2. FastMCP server, вызывающий Rust API.
+3. Worker loop: `claim_next` → docker → `update`.
+4. IR schema v0 + renderer stubs.
+5. Git worktree helpers.
 
 ---
 
-## Источники исследования
+## Источники
 
-- FastMCP Background Tasks: https://gofastmcp.com/servers/tasks.md (backends: `memory://` \| `redis://`)
-- Docket / pydocket: Redis Streams required; memory via burner-redis for tests
-- SQLAlchemy 2.0 SQLite dialect: QueuePool + `check_same_thread=False` for file DB; WAL recommended
-- Python 3.14: stable since 2025-10-07; FastMCP 3.14 warning fix in PR #3767
-- Docker: DooD socket = host root; DinD typically `--privileged`; rootless reduces blast radius
-- Git: bare + worktree — стандарт для multi-checkout / agent isolation
-- IR: structured IR for multi-renderer pipelines; Markdown better as authoring mediation layer
+- FastMCP tasks: только `memory://` / `redis://` — https://gofastmcp.com/servers/tasks.md
+- PyO3 0.25+: поддержка CPython 3.14; 0.29.x актуален
+- maturin: pyo3 bindings, abi3 / version-specific wheels
+- rusqlite `bundled`: встроенный SQLite, без системной lib
+- SQLAlchemy снят с task-пути (D3.3)

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "mcp-presentation"
+version = "0.1.0"
+description = "MCP server for presentation builds (PDF/web) with Rust task store"
+requires-python = ">=3.14"
+readme = "README.md"
+dependencies = [
+    "fastmcp>=3.4.4",
+    "pydantic>=2.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+mcp-presentation = "mcp_presentation.server:main"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "mcp_presentation._tasks"
