@@ -176,7 +176,7 @@ class BuildWorker:
                 logs=logs,
             )
             return
-        if target == "web" and not artifact.exists():
+        if target in {"web", "slide-image"} and not artifact.exists():
             self._tasks.update(
                 tid,
                 status="error",
@@ -231,7 +231,7 @@ class BuildWorker:
                 msg = "no LaTeX source or presentation.ir.json in workspace"
                 raise ValueError(msg)
             return LATEX_IMAGE, ["pdf"]
-        if target in {"web", "web-pdf"}:
+        if target in {"web", "web-pdf", "slide-image"}:
             src = ensure_web_source(host_ws)
             if src is None:
                 msg = "no web source or presentation.ir.json in workspace"
@@ -239,6 +239,10 @@ class BuildWorker:
             return WEB_IMAGE, [target]
         msg = f"unsupported target: {target}"
         raise ValueError(msg)
+
+    @property
+    def runner(self) -> ContainerRunner:
+        return self._runner
 
 
 _worker: BuildWorker | None = None
@@ -257,6 +261,11 @@ def get_worker(tasks: TaskStore, runner: ContainerRunner | None = None) -> Build
             _worker = BuildWorker(tasks, runner)
             _worker.start_daemon()
         return _worker
+
+
+def get_container_runner(tasks: TaskStore) -> ContainerRunner:
+    """Container runner used by the build worker (for sync tools)."""
+    return get_worker(tasks).runner
 
 
 def wake_worker(tasks: TaskStore) -> None:

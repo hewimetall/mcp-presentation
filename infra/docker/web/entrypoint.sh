@@ -83,8 +83,28 @@ case "${TARGET}" in
       exit 1
     fi
     ;;
+  slide-image)
+    src=""
+    for candidate in slides.md presentation.md index.md deck.md; do
+      if [[ -f "${candidate}" ]]; then
+        src="${candidate}"
+        break
+      fi
+    done
+    if [[ -z "${src}" ]]; then
+      echo "error: need Marp markdown (slides.md) for slide-image" >&2
+      exit 1
+    fi
+    mkdir -p "${OUT}/slides"
+    # Produces out/slides/slide.001.png, slide.002.png, …
+    marp "${src}" --images png --allow-local-files \
+      --browser-path "${CHROME_PATH:-/usr/bin/chromium}" \
+      -o "${OUT}/slides/slide.png"
+    echo "artifact=${OUT}/slides"
+    ls -la "${OUT}/slides"
+    ;;
   *)
-    echo "usage: entrypoint.sh [web|web-pdf|pdf]" >&2
+    echo "usage: entrypoint.sh [web|web-pdf|pdf|slide-image]" >&2
     exit 2
     ;;
 esac

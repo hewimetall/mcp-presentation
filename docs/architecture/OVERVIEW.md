@@ -40,8 +40,9 @@
 | `set_active_workspace` | bind session → workspace |
 | `save_presentation_ir` | validate + write `presentation.ir.json` |
 | `commit_workspace` | gix commit of listed paths |
-| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` |
+| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
 | `get_build_status` | poll task |
+| `get_slide_image` | PNG одного слайда (1-based), Marp `--images` |
 | `deploy_presentation` | enqueue local deploy |
 
 ## Task statuses
@@ -67,6 +68,7 @@
 | `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` |
 | `web` | `mcp-presentation/web-builder:latest` | `web` |
 | `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
+| `slide-image` | `mcp-presentation/web-builder:latest` | `slide-image` |
 
 See [`infra/README.md`](../infra/README.md).
 

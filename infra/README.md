@@ -51,6 +51,7 @@ WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run -
 | `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` |
 | `web` | `mcp-presentation/web-builder:latest` | `web` |
 | `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
+| `slide-image` | `mcp-presentation/web-builder:latest` | `slide-image` → `out/slides/slide.NNN.png` |
 
 Binds: `<abs workspace>:/work` via bollard `ContainerRuntime.run` (ADR-0012).
 

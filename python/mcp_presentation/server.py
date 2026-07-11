@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 
 from mcp_git import GitService
 from mcp_presentation._tasks import TaskStore
@@ -16,6 +17,7 @@ from mcp_presentation.ir_compile import IR_FILENAME, write_ir
 from mcp_presentation.ir_models import validate_ir_obj
 from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
 from mcp_presentation.settings import BUILD_TARGETS
+from mcp_presentation.slide_image import resolve_slide_png, slide_indices
 from mcp_presentation.types import (
     BuildPresentationResult,
     BuildQueued,
@@ -29,16 +31,19 @@ from mcp_presentation.types import (
     ErrorGit,
     ErrorInvalidId,
     ErrorInvalidIr,
+    ErrorInvalidSlide,
     ErrorInvalidTarget,
     ErrorNoActiveWorkspace,
     ErrorNoArtifact,
     ErrorNotFound,
+    ErrorRenderFailed,
     ErrorSessionNotFound,
     ErrorTaskNotFound,
     ErrorWorkspaceNotFound,
     ErrorWorkspaceUnavailable,
     GetBuildStatusResult,
     GetSessionResult,
+    GetSlideImageResult,
     GetWorkspaceResult,
     IrSaved,
     ProjectCreated,
@@ -54,7 +59,7 @@ from mcp_presentation.types import (
     WorkspaceRow,
     WorkspacesList,
 )
-from mcp_presentation.worker import wake_worker
+from mcp_presentation.worker import get_container_runner, wake_worker
 from mcp_state import StateStore
 
 STATE_DIR = Path(os.environ.get("MCP_PRESENTATION_STATE", "state"))
@@ -378,6 +383,45 @@ def get_build_status(task_id: str) -> GetBuildStatusResult:
         missing: ErrorTaskNotFound = {"error": "not_found", "task_id": task_id}
         return missing
     return _task_row(row)
+
+
+@mcp.tool()
+def get_slide_image(
+    session_id: str, slide: int, force: bool = False
+) -> Image | GetSlideImageResult:
+    """Render (if needed) and return PNG for one slide (1-based index).
+
+    Slide 1 is the first Marp page (usually the title page from IR).
+    Uses the web-builder image (`slide-image` → Marp --images png).
+    """
+    resolved = _active_workspace(session_id)
+    if isinstance(resolved, dict):
+        return resolved
+    _, ws_d = resolved
+    host_ws = Path(ws_d["path"]).resolve()
+    try:
+        runner = get_container_runner(get_tasks())
+        path = resolve_slide_png(host_ws, slide, runner, force=force)
+    except ValueError as exc:
+        bad: ErrorInvalidSlide = {
+            "error": "invalid_slide",
+            "slide": slide,
+            "detail": str(exc),
+            "available": slide_indices(host_ws),
+        }
+        return bad
+    except LookupError as exc:
+        missing_slide: ErrorInvalidSlide = {
+            "error": "invalid_slide",
+            "slide": slide,
+            "detail": str(exc),
+            "available": slide_indices(host_ws),
+        }
+        return missing_slide
+    except Exception as exc:
+        failed: ErrorRenderFailed = {"error": "render_failed", "detail": str(exc)}
+        return failed
+    return Image(path=str(path), format="png")
 
 
 @mcp.tool()
