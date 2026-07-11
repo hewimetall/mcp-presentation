@@ -2,36 +2,39 @@
 
 MCP-сервер для сборки презентаций (**PDF** / **web**) с task-based async pipeline.
 
-## Пакеты
+## Пакеты (ports & adapters)
 
-| Пакет | Что хранит | PyO3 |
-|-------|------------|------|
-| **`mcp-presentation`** (этот репо root) | задачи сборки → `state/tasks.db` | `mcp_presentation._tasks` |
-| **`mcp-state`** ([`packages/mcp-state`](packages/mcp-state)) | сессии + workspaces → `state/sessions.db` | `mcp_state._native` |
+| Пакет | Port / роль | Adapter | Артефакт |
+|-------|-------------|---------|----------|
+| **`mcp-presentation`** | FastMCP + TaskStore | rusqlite | `state/tasks.db` |
+| **`mcp-state`** | sessions / workspaces | rusqlite | `state/sessions.db` |
+| **`mcp-git`** | `GitPort` | **gix** | bare + worktrees |
+| **`mcp-docker`** | `ContainerRuntime` | **bollard** | Docker Engine API |
 
-Стек: **Python 3.14 · FastMCP · Rust/PyO3 · rusqlite · maturin**.
+Стек: **Python 3.14 · FastMCP · Rust/PyO3 · gix · bollard · rusqlite**.
+
+Git v1: `init_bare` / `add_worktree` / `commit` — **без CLI, без push** (ADR-0011).  
+Docker: DooD socket через bollard — **без `docker` CLI** (ADR-0012).
 
 ## ADR
 
-→ [`docs/adr/`](docs/adr/README.md)
+→ [`docs/adr/`](docs/adr/README.md) · overview [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
 
 ## Dev
 
 ```bash
 uv venv -p 3.14 .venv && source .venv/bin/activate
-# отдельный пакет state
 (cd packages/mcp-state && maturin develop)
-# tasks + MCP server
+(cd packages/mcp-git && maturin develop)
+(cd packages/mcp-docker && maturin develop)
 maturin develop
-uv pip install -e packages/mcp-state
-pytest -q packages/mcp-state/tests tests
+pytest -q
 ```
 
-## Состояние на диске
+## Диск
 
 ```text
-state/tasks.db           # mcp-presentation TaskStore
-state/sessions.db        # mcp-state StateStore
-projects/<id>.git/       # git bare
-workspaces/<ws_id>/      # git worktree checkout
+state/tasks.db  state/sessions.db
+projects/<id>.git/
+workspaces/<ws_id>/
 ```

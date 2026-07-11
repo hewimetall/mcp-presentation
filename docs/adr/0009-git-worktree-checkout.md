@@ -1,6 +1,6 @@
 # ADR-0009: Git checkout via worktree from bare
 
-- Status: Accepted
+- Status: Superseded by [ADR-0011](0011-mcp-git-gix-no-cli.md)
 - Date: 2026-07-11
 - Code: D20 (was Q7)
 - Deciders: product / architecture
@@ -10,29 +10,18 @@
 Истина проекта — **git bare** в `projects/<project_id>.git`.
 Нужны изолированные working directories для сессий/сборок.
 
-## Decision
+## Decision (историческое)
 
-Checkout = **`git worktree`** от bare, не полный clone:
+Checkout = worktree от bare, не полный clone. Изначально предполагался CLI:
 
 ```text
 git --git-dir=projects/<id>.git worktree add workspaces/<ws_id> <ref>
 ```
 
-- `workspaces/<ws_id>` — active checkout сессии.
-- Удаление: `git worktree remove` (+ prune).
+## Update
 
-## Consequences
-
-### Positive
-
-- Общий object store (экономия диска).
-- Fetch один раз в bare.
-- Git не даст checkout той же ветки в двух worktree — защита от конфликтов.
-
-### Negative / risks
-
-- Worktree lifecycle нужно аккуратно чистить.
-- Shared hooks/config — учитывать при multi-session.
+Реализация **без CLI**: пакет `mcp-git` + **gix** (ADR-0011).
+Семантика worktree сохраняется; меняется механизм.
 
 ## Alternatives considered
 

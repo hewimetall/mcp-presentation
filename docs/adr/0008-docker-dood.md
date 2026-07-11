@@ -1,13 +1,13 @@
 # ADR-0008: Docker model — DooD default
 
-- Status: Accepted
+- Status: Accepted (amended by ADR-0012)
 - Date: 2026-07-11
 - Code: D19 (was Q5)
 - Deciders: product / architecture
 
 ## Context
 
-Worker запускает изолированную сборку через контейнеры (`docker run` + mount workspace).
+Worker запускает изолированную сборку через контейнеры с mount workspace.
 Нужна модель доступа к Docker на хосте MCP.
 
 | | DooD (socket) | DinD | Rootless |
@@ -18,9 +18,10 @@ Worker запускает изолированную сборку через к�
 
 ## Decision
 
-1. **Default: DooD** — mount `/var/run/docker.sock`, `docker run --rm -v <workspace>:<workspace> ...`.
-2. **Preferred production: rootless Docker**, если доступен (тот же CLI-контракт).
-3. **DinD отклоняем** для v1 (privileged, storage, лишняя поверхность).
+1. **Default: DooD** — доступ к host Docker daemon через socket.
+2. **Клиент: bollard** через порт `ContainerRuntime` — [ADR-0012](0012-docker-ports-adapters-bollard.md). **Не** `docker` CLI.
+3. **Preferred production: rootless Docker**, если доступен.
+4. **DinD отклоняем** для v1.
 
 ## Consequences
 
@@ -28,14 +29,16 @@ Worker запускает изолированную сборку через к�
 
 - Простой single-host deploy.
 - Rootless — путь ужесточения без смены API.
+- Тестируемый port/adapter.
 
 ### Negative / risks
 
-- Socket mount ≈ доверие к содержимому workspace/образов на уровне host root — задокументировать в README/threat model.
+- Socket mount ≈ доверие к содержимому workspace/образов на уровне host root.
 
 ## Alternatives considered
 
 | Option | Why not |
 |--------|---------|
 | DinD | `--privileged`, сложный nested storage |
-| Daemonless-only (Kaniko/Buildah) | Можно позже; v1 опирается на `docker run` runtime, не только image build |
+| `docker` CLI subprocess | Заменено на bollard (ADR-0012) |
+| Daemonless-only (Kaniko/Buildah) | Можно позже; v1 = run container |
