@@ -19,6 +19,7 @@ from mcp_presentation.settings import (
     LATEX_IMAGE,
     workspace_bind,
 )
+from mcp_presentation.slide_image import require_slide_pngs
 from mcp_presentation.types import TaskRow
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,7 @@ class BuildWorker:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(
-            target=self._loop, name="mcp-build-worker", daemon=True
-        )
+        self._thread = threading.Thread(target=self._loop, name="mcp-build-worker", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -146,6 +145,7 @@ class BuildWorker:
         if not artifact.is_file():
             msg = f"missing artifact {artifact}"
             raise RuntimeError(msg)
+        require_slide_pngs(host_ws)
         return artifact
 
     def _run_deploy(self, tid: str, task: TaskRow, host_ws: Path) -> None:

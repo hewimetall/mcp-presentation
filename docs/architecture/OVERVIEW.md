@@ -42,7 +42,7 @@
 | `commit_workspace` | gix commit of listed paths |
 | `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
 | `get_build_status` | poll task |
-| `get_slide_image` | PNG одного **готового** слайда (1-based); без сборки |
+| `get_slide_image` | PNG одного **готового** слайда; без сборки (после pdf/web) |
 | `deploy_presentation` | enqueue local deploy |
 
 ## Task statuses
@@ -76,14 +76,16 @@ See [`infra/README.md`](../infra/README.md).
 
 Web only:
 
-| Function | Target | Artifact |
-|----------|--------|----------|
-| `build_web` | `web` | `dist/` |
-| `build_web_pdf` | `web-pdf` | `out/web.pdf` |
-| `build_slide_images` | `slide-image` | `out/slides/` |
+| Function | Target | Artifact + slides |
+|----------|--------|-------------------|
+| `build_web` | `web` | `dist/` + `out/slides/` |
+| `build_web_pdf` | `web-pdf` | `out/web.pdf` + `out/slides/` |
+| `build_slide_images` | `slide-image` | `out/slides/` only |
 
-Worker calls `engines.run_web_target(...)` for web targets. PDF stays in the worker.
-MCP `get_slide_image` only reads `out/slides/slide.NNN.png` after a slide-image build.
+**PDF** (worker): `out/main.pdf` + `out/slides/` via `pdftoppm` inside latex-builder.
+
+Every `pdf` / `web` / `web-pdf` rebuild **clears and rewrites** `out/slides/slide.NNN.png`.
+MCP `get_slide_image` only reads those files.
 
 ## Build worker
 
@@ -91,7 +93,7 @@ After enqueue, `wake_worker` starts a daemon that:
 
 1. `claim_next`
 2. validates IR (if present)
-3. web → `run_web_target` / pdf → worker latex path / deploy → local copy
+3. web → `run_web_target` / pdf → latex path / deploy → local copy
 4. writes `done` / `error`
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).

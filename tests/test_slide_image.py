@@ -1,4 +1,4 @@
-"""Slide image read tool + engine slide-image build."""
+"""Slide PNGs are part of pdf/web builds; get_slide_image only reads them."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ pytest.importorskip("mcp_presentation._tasks")
 pytest.importorskip("mcp_git._native")
 
 import mcp_presentation.server as server
-from mcp_presentation.engines import build_slide_images
+from mcp_presentation.engines import build_web
 from mcp_presentation.slide_image import get_slide_png, slide_indices
 from mcp_presentation.worker import BuildWorker
 from test_worker import TINY_PNG, FakeRunner
@@ -61,19 +61,44 @@ def test_get_slide_png_reads_only(tmp_path: Path) -> None:
         get_slide_png(empty, 1)
 
 
-def test_engine_build_slide_images(tmp_path: Path) -> None:
+def test_web_build_refreshes_slide_pngs(tmp_path: Path) -> None:
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "presentation.ir.json").write_text(
         json.dumps({"title": "T", "slides": [{"title": "A"}, {"title": "B"}]}),
         encoding="utf-8",
     )
-    out = build_slide_images(ws, FakeRunner())
-    assert out.is_dir()
+    # stale image from previous deck
+    stale = ws / "out" / "slides"
+    stale.mkdir(parents=True)
+    (stale / "slide.001.png").write_bytes(TINY_PNG)
+    (stale / "slide.009.png").write_bytes(TINY_PNG)
+
+    build_web(ws, FakeRunner())
     assert slide_indices(ws) == [1, 2, 3]
+    assert not (stale / "slide.009.png").exists()
 
 
-def test_get_slide_image_tool_needs_build() -> None:
+def test_pdf_build_emits_slide_pngs(tmp_path: Path) -> None:
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "presentation.ir.json").write_text(
+        json.dumps({"title": "T", "slides": [{"title": "A"}]}),
+        encoding="utf-8",
+    )
+    store = __import__("mcp_presentation._tasks", fromlist=["TaskStore"]).TaskStore(
+        str(tmp_path / "t.db")
+    )
+    worker = BuildWorker(store, FakeRunner())
+    tid = store.submit("s", str(ws), "pdf")
+    assert worker.process_one() is True
+    row = store.get(tid)
+    assert row is not None
+    assert row["status"] == "done"
+    assert slide_indices(ws) == [1, 2]
+
+
+def test_get_slide_image_after_web_build() -> None:
     sid = server.create_session()["session_id"]
     server.create_project("slides")
     server.checkout_workspace(sid, "slides")
@@ -85,13 +110,12 @@ def test_get_slide_image_tool_needs_build() -> None:
     assert isinstance(missing, dict)
     assert missing["error"] == "no_artifact"
 
-    queued = server.build_presentation(sid, "slide-image")
+    queued = server.build_presentation(sid, "web")
     import mcp_presentation.worker as worker_mod
 
     assert worker_mod._worker is not None
     assert worker_mod._worker.process_one() is True
-    status = server.get_build_status(queued["task_id"])
-    assert status["status"] == "done"
+    assert server.get_build_status(queued["task_id"])["status"] == "done"
 
     img = server.get_slide_image(sid, 1)
     assert isinstance(img, Image)

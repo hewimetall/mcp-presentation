@@ -388,8 +388,8 @@ def get_build_status(task_id: str) -> GetBuildStatusResult:
 def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
     """Return PNG for one already-built slide (1-based). Does not build.
 
-    Requires a prior ``build_presentation(..., target="slide-image")``.
-    Slide 1 is the first Marp page (usually the title page from IR).
+    Slide PNGs are written/refreshed by ``build_presentation`` for
+    ``pdf`` / ``web`` / ``web-pdf`` (and optional ``slide-image``).
     """
     resolved = _active_workspace(session_id)
     if isinstance(resolved, dict):

@@ -49,8 +49,11 @@ class FakeRunner:
                 (dist / "index.html").write_text("<html></html>", encoding="utf-8")
             if cmd == ["web-pdf"]:
                 (out / "web.pdf").write_bytes(b"%PDF-web")
-            if cmd == ["slide-image"]:
+            if len(cmd) == 1 and cmd[0] in {"pdf", "web", "web-pdf", "slide-image"}:
                 slides = out / "slides"
+                if slides.exists():
+                    for old in slides.glob("slide.*.png"):
+                        old.unlink()
                 slides.mkdir(parents=True, exist_ok=True)
                 n = 2
                 ir_path = Path(host) / "presentation.ir.json"

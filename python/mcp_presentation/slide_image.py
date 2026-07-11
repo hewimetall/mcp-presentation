@@ -1,4 +1,4 @@
-"""Read slide PNGs from a finished slide-image build (no render)."""
+"""Read slide PNGs produced by web/pdf builds (no render)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def slides_dir(workspace: Path) -> Path:
 
 
 def slide_png_path(workspace: Path, slide: int) -> Path:
-    """Marp naming: slide.001.png (1-based)."""
+    """Naming: slide.001.png (1-based)."""
     return slides_dir(workspace) / f"slide.{slide:03d}.png"
 
 
@@ -39,6 +39,16 @@ def slide_indices(workspace: Path) -> list[int]:
     return out
 
 
+def require_slide_pngs(workspace: Path) -> Path:
+    """Assert out/slides/slide.*.png exist after a build. Returns slides dir."""
+    root = slides_dir(workspace)
+    pngs = list_slide_pngs(workspace)
+    if not pngs:
+        msg = f"missing slide PNGs under {root} (expected slide.001.png …)"
+        raise RuntimeError(msg)
+    return root
+
+
 def get_slide_png(workspace: Path, slide: int) -> Path:
     """Return existing slide PNG (1-based). Does not build — artifacts must exist."""
     if slide < 1:
@@ -47,7 +57,10 @@ def get_slide_png(workspace: Path, slide: int) -> Path:
 
     available = slide_indices(workspace)
     if not available:
-        msg = "no slide images in out/slides/; run build_presentation(target='slide-image') first"
+        msg = (
+            "no slide images in out/slides/; "
+            "run build_presentation(target='pdf'|'web'|'web-pdf') first"
+        )
         raise FileNotFoundError(msg)
 
     path = slide_png_path(workspace, slide)

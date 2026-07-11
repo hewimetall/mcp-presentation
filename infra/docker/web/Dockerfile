@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-core \
     fonts-noto-color-emoji \
     git \
+    poppler-utils \
     # Chromium runtime deps (Playwright/Puppeteer PDF export)
     libasound2 \
     libatk-bridge2.0-0 \

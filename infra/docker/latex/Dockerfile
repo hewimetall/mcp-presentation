@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     texlive-plain-generic \
     texlive-science \
     texlive-xetex \
+    poppler-utils \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
