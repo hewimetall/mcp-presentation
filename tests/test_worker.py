@@ -10,8 +10,9 @@ import pytest
 pytest.importorskip("mcp_presentation._tasks")
 
 from mcp_presentation._tasks import TaskStore
+from mcp_presentation.engines import RunResult
 from mcp_presentation.ir_compile import ensure_latex_source, ensure_web_source
-from mcp_presentation.worker import BuildWorker, WorkerRunResult
+from mcp_presentation.worker import BuildWorker
 
 # 1x1 PNG
 TINY_PNG = (
@@ -34,7 +35,7 @@ class FakeRunner:
         workdir: str | None = None,
         env: list[str] | None = None,
         auto_remove: bool = True,
-    ) -> WorkerRunResult:
+    ) -> RunResult:
         self.calls.append((image, cmd, list(binds or [])))
         if binds:
             host = binds[0].split(":", 1)[0]
@@ -61,7 +62,7 @@ class FakeRunner:
                             n = 1 + len(slides_raw)
                 for i in range(1, n + 1):
                     (slides / f"slide.{i:03d}.png").write_bytes(TINY_PNG)
-        return WorkerRunResult(
+        return RunResult(
             status_code=self.status_code,
             logs="ok\n",
             container_id="fake",

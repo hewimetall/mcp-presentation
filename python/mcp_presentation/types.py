@@ -159,11 +159,6 @@ class ErrorInvalidSlide(TypedDict):
     available: list[int]
 
 
-class ErrorRenderFailed(TypedDict):
-    error: Literal["render_failed"]
-    detail: str
-
-
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
@@ -187,7 +182,7 @@ GetSlideImageResult = (
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
     | ErrorInvalidSlide
-    | ErrorRenderFailed
+    | ErrorNoArtifact
 )
 CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit
 CheckoutWorkspaceResult = CheckoutResult | ErrorSessionNotFound | ErrorInvalidId | ErrorGit

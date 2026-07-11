@@ -17,7 +17,7 @@ from mcp_presentation.ir_compile import IR_FILENAME, write_ir
 from mcp_presentation.ir_models import validate_ir_obj
 from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
 from mcp_presentation.settings import BUILD_TARGETS
-from mcp_presentation.slide_image import resolve_slide_png, slide_indices
+from mcp_presentation.slide_image import get_slide_png, slide_indices
 from mcp_presentation.types import (
     BuildPresentationResult,
     BuildQueued,
@@ -36,7 +36,6 @@ from mcp_presentation.types import (
     ErrorNoActiveWorkspace,
     ErrorNoArtifact,
     ErrorNotFound,
-    ErrorRenderFailed,
     ErrorSessionNotFound,
     ErrorTaskNotFound,
     ErrorWorkspaceNotFound,
@@ -59,7 +58,7 @@ from mcp_presentation.types import (
     WorkspaceRow,
     WorkspacesList,
 )
-from mcp_presentation.worker import get_container_runner, wake_worker
+from mcp_presentation.worker import wake_worker
 from mcp_state import StateStore
 
 STATE_DIR = Path(os.environ.get("MCP_PRESENTATION_STATE", "state"))
@@ -386,13 +385,11 @@ def get_build_status(task_id: str) -> GetBuildStatusResult:
 
 
 @mcp.tool()
-def get_slide_image(
-    session_id: str, slide: int, force: bool = False
-) -> Image | GetSlideImageResult:
-    """Render (if needed) and return PNG for one slide (1-based index).
+def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
+    """Return PNG for one already-built slide (1-based). Does not build.
 
+    Requires a prior ``build_presentation(..., target="slide-image")``.
     Slide 1 is the first Marp page (usually the title page from IR).
-    Uses the web-builder image (`slide-image` → Marp --images png).
     """
     resolved = _active_workspace(session_id)
     if isinstance(resolved, dict):
@@ -400,8 +397,7 @@ def get_slide_image(
     _, ws_d = resolved
     host_ws = Path(ws_d["path"]).resolve()
     try:
-        runner = get_container_runner(get_tasks())
-        path = resolve_slide_png(host_ws, slide, runner, force=force)
+        path = get_slide_png(host_ws, slide)
     except ValueError as exc:
         bad: ErrorInvalidSlide = {
             "error": "invalid_slide",
@@ -410,6 +406,12 @@ def get_slide_image(
             "available": slide_indices(host_ws),
         }
         return bad
+    except FileNotFoundError as exc:
+        missing_build: ErrorNoArtifact = {
+            "error": "no_artifact",
+            "detail": str(exc),
+        }
+        return missing_build
     except LookupError as exc:
         missing_slide: ErrorInvalidSlide = {
             "error": "invalid_slide",
@@ -418,9 +420,6 @@ def get_slide_image(
             "available": slide_indices(host_ws),
         }
         return missing_slide
-    except Exception as exc:
-        failed: ErrorRenderFailed = {"error": "render_failed", "detail": str(exc)}
-        return failed
     return Image(path=str(path), format="png")
 
 

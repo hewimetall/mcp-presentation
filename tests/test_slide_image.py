@@ -1,4 +1,4 @@
-"""Slide image render + get_slide_image tool."""
+"""Slide image read tool + engine slide-image build."""
 
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ pytest.importorskip("mcp_presentation._tasks")
 pytest.importorskip("mcp_git._native")
 
 import mcp_presentation.server as server
-from mcp_presentation.slide_image import resolve_slide_png, slide_indices
+from mcp_presentation.engines import build_slide_images
+from mcp_presentation.slide_image import get_slide_png, slide_indices
 from mcp_presentation.worker import BuildWorker
-from test_worker import FakeRunner
+from test_worker import TINY_PNG, FakeRunner
 
 
 @pytest.fixture(autouse=True)
@@ -43,40 +44,55 @@ def _isolate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     sync_worker.stop()
 
 
-def test_resolve_slide_png(tmp_path: Path) -> None:
+def test_get_slide_png_reads_only(tmp_path: Path) -> None:
+    ws = tmp_path / "ws"
+    slides = ws / "out" / "slides"
+    slides.mkdir(parents=True)
+    (slides / "slide.001.png").write_bytes(TINY_PNG)
+    (slides / "slide.002.png").write_bytes(TINY_PNG)
+    path = get_slide_png(ws, 2)
+    assert path.name == "slide.002.png"
+    assert slide_indices(ws) == [1, 2]
+    with pytest.raises(LookupError):
+        get_slide_png(ws, 9)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError):
+        get_slide_png(empty, 1)
+
+
+def test_engine_build_slide_images(tmp_path: Path) -> None:
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "presentation.ir.json").write_text(
-        json.dumps(
-            {
-                "title": "T",
-                "slides": [{"title": "A"}, {"title": "B"}],
-            }
-        ),
+        json.dumps({"title": "T", "slides": [{"title": "A"}, {"title": "B"}]}),
         encoding="utf-8",
     )
-    runner = FakeRunner()
-    path = resolve_slide_png(ws, 2, runner)
-    assert path.is_file()
-    assert path.name == "slide.002.png"
+    out = build_slide_images(ws, FakeRunner())
+    assert out.is_dir()
     assert slide_indices(ws) == [1, 2, 3]
-    with pytest.raises(LookupError):
-        resolve_slide_png(ws, 9, runner, force=False)
 
 
-def test_get_slide_image_tool() -> None:
+def test_get_slide_image_tool_needs_build() -> None:
     sid = server.create_session()["session_id"]
     server.create_project("slides")
     server.checkout_workspace(sid, "slides")
     server.save_presentation_ir(
         sid,
-        json.dumps(
-            {
-                "title": "Deck",
-                "slides": [{"title": "One", "bullets": ["x"]}],
-            }
-        ),
+        json.dumps({"title": "Deck", "slides": [{"title": "One", "bullets": ["x"]}]}),
     )
+    missing = server.get_slide_image(sid, 1)
+    assert isinstance(missing, dict)
+    assert missing["error"] == "no_artifact"
+
+    queued = server.build_presentation(sid, "slide-image")
+    import mcp_presentation.worker as worker_mod
+
+    assert worker_mod._worker is not None
+    assert worker_mod._worker.process_one() is True
+    status = server.get_build_status(queued["task_id"])
+    assert status["status"] == "done"
+
     img = server.get_slide_image(sid, 1)
     assert isinstance(img, Image)
     bad = server.get_slide_image(sid, 99)

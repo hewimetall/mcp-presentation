@@ -42,7 +42,7 @@
 | `commit_workspace` | gix commit of listed paths |
 | `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
 | `get_build_status` | poll task |
-| `get_slide_image` | PNG одного слайда (1-based), Marp `--images` |
+| `get_slide_image` | PNG одного **готового** слайда (1-based); без сборки |
 | `deploy_presentation` | enqueue local deploy |
 
 ## Task statuses
@@ -72,15 +72,24 @@
 
 See [`infra/README.md`](../infra/README.md).
 
+## Build engines (library)
+
+| Engine | Functions | Image |
+|--------|-----------|-------|
+| latex | `build_pdf` | `latex-builder` |
+| web | `build_web`, `build_web_pdf`, `build_slide_images` | `web-builder` |
+
+Worker calls `engines.run_target(...)`. MCP `get_slide_image` only reads
+`out/slides/slide.NNN.png` after `build_presentation(..., "slide-image")`.
+
 ## Build worker
 
 After enqueue, `wake_worker` starts a daemon that:
 
 1. `claim_next`
 2. validates IR (if present)
-3. compiles IR → Beamer / Marp when needed
-4. runs the image **or** local deploy adapter
-5. writes `done` / `error`
+3. calls engine `run_target` (latex/web) **or** local deploy
+4. writes `done` / `error`
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).
 

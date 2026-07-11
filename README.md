@@ -27,7 +27,7 @@ create_session
   → commit_workspace(session_id, …)
   → build_presentation(session_id, "pdf"|"web"|"web-pdf")
   → get_build_status(task_id)                    # queued→running→done|error
-  → get_slide_image(session_id, slide=1)         # PNG, 1-based Marp page
+  → get_slide_image(session_id, slide=1)         # read PNG only (after slide-image build)
   → deploy_presentation(session_id)              # latest artifact → out/deployed
 ```
 
