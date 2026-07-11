@@ -40,6 +40,7 @@ async fn run_async(req: RunContainerRequest) -> Result<RunContainerResult, Conta
         image: Some(req.image.clone()),
         cmd: Some(req.cmd.clone()),
         working_dir: req.workdir.clone(),
+        user: req.user.clone(),
         env: if req.env.is_empty() {
             None
         } else {
@@ -67,9 +68,29 @@ async fn run_async(req: RunContainerRequest) -> Result<RunContainerResult, Conta
         }),
     );
     let mut status_code: i64 = -1;
+    let mut wait_err: Option<String> = None;
     while let Some(msg) = wait_stream.next().await {
-        let msg = msg.map_err(|e| ContainerError::msg(format!("wait: {e}")))?;
-        status_code = msg.status_code;
+        match msg {
+            Ok(m) => status_code = m.status_code,
+            Err(e) => {
+                wait_err = Some(e.to_string());
+                break;
+            }
+        }
+    }
+    if status_code < 0 {
+        if let Ok(inspect) = docker.inspect_container(&id, None).await {
+            if let Some(state) = inspect.state {
+                if let Some(code) = state.exit_code {
+                    status_code = code;
+                }
+            }
+        }
+    }
+    if status_code < 0 {
+        if let Some(e) = wait_err {
+            return Err(ContainerError::msg(format!("wait: {e}")));
+        }
     }
 
     let mut log_stream = docker.logs(

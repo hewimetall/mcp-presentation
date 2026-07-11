@@ -152,6 +152,13 @@ class ErrorNoArtifact(TypedDict):
     detail: str
 
 
+class ErrorInvalidSlide(TypedDict):
+    error: Literal["invalid_slide"]
+    slide: int
+    detail: str
+    available: list[int]
+
+
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
@@ -168,6 +175,13 @@ DeployPresentationResult = (
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
+    | ErrorNoArtifact
+)
+GetSlideImageResult = (
+    ErrorSessionNotFound
+    | ErrorNoActiveWorkspace
+    | ErrorWorkspaceUnavailable
+    | ErrorInvalidSlide
     | ErrorNoArtifact
 )
 CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build PDF from workspace mounted at /work.
 # Expects main.tex|presentation.tex|slides.tex (IR is compiled to main.tex by the host worker).
+# Always refreshes out/slides/slide.NNN.png from the PDF (pdftoppm).
 set -euo pipefail
 
 WORK="${WORK_DIR:-/work}"
@@ -37,9 +38,36 @@ latexmk -xelatex -interaction=nonstopmode -halt-on-error \
   "${TEX}"
 
 # Normalize artifact name for TaskStore
-if [[ -f "${OUT}/${TEX%.tex}.pdf" ]]; then
-  cp -f "${OUT}/${TEX%.tex}.pdf" "${OUT}/main.pdf"
+src_pdf="${OUT}/${TEX%.tex}.pdf"
+if [[ -f "${src_pdf}" && "${src_pdf}" != "${OUT}/main.pdf" ]]; then
+  cp -f "${src_pdf}" "${OUT}/main.pdf"
 fi
 
+if [[ ! -f "${OUT}/main.pdf" ]]; then
+  echo "error: missing ${OUT}/main.pdf after latexmk" >&2
+  exit 1
+fi
+
+# Refresh slide PNGs on every PDF rebuild (1-based: slide.001.png …).
+SLIDES="${OUT}/slides"
+rm -rf "${SLIDES}"
+mkdir -p "${SLIDES}"
+pdftoppm -png -r 144 "${OUT}/main.pdf" "${SLIDES}/page"
+i=1
+shopt -s nullglob
+pages=("${SLIDES}"/page-*.png)
+if [[ ${#pages[@]} -eq 0 ]]; then
+  echo "error: pdftoppm produced no pages from ${OUT}/main.pdf" >&2
+  exit 1
+fi
+# Sort numerically by page index embedded in page-N.png
+mapfile -t pages < <(printf '%s\n' "${pages[@]}" | sort -V)
+for f in "${pages[@]}"; do
+  printf -v dest "${SLIDES}/slide.%03d.png" "${i}"
+  mv "${f}" "${dest}"
+  i=$((i + 1))
+done
+
 echo "artifact=${OUT}/main.pdf"
-ls -la "${OUT}/main.pdf"
+echo "slides=${SLIDES} (count=$((i - 1)))"
+ls -la "${OUT}/main.pdf" "${SLIDES}"

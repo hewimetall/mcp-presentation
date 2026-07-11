@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,8 +10,16 @@ import pytest
 pytest.importorskip("mcp_presentation._tasks")
 
 from mcp_presentation._tasks import TaskStore
+from mcp_presentation.engines import RunResult
 from mcp_presentation.ir_compile import ensure_latex_source, ensure_web_source
-from mcp_presentation.worker import BuildWorker, WorkerRunResult
+from mcp_presentation.worker import BuildWorker
+
+# 1x1 PNG
+TINY_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00"
+    b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 class FakeRunner:
@@ -26,8 +35,10 @@ class FakeRunner:
         workdir: str | None = None,
         env: list[str] | None = None,
         auto_remove: bool = True,
-    ) -> WorkerRunResult:
+        user: str | None = None,
+    ) -> RunResult:
         self.calls.append((image, cmd, list(binds or [])))
+        _ = (workdir, env, auto_remove, user)
         if binds:
             host = binds[0].split(":", 1)[0]
             out = Path(host) / "out"
@@ -40,7 +51,23 @@ class FakeRunner:
                 (dist / "index.html").write_text("<html></html>", encoding="utf-8")
             if cmd == ["web-pdf"]:
                 (out / "web.pdf").write_bytes(b"%PDF-web")
-        return WorkerRunResult(
+            if len(cmd) == 1 and cmd[0] in {"pdf", "web", "web-pdf", "slide-image"}:
+                slides = out / "slides"
+                if slides.exists():
+                    for old in slides.glob("slide.*.png"):
+                        old.unlink()
+                slides.mkdir(parents=True, exist_ok=True)
+                n = 2
+                ir_path = Path(host) / "presentation.ir.json"
+                if ir_path.is_file():
+                    raw: object = json.loads(ir_path.read_text(encoding="utf-8"))
+                    if isinstance(raw, dict):
+                        slides_raw = raw.get("slides")
+                        if isinstance(slides_raw, list):
+                            n = 1 + len(slides_raw)
+                for i in range(1, n + 1):
+                    (slides / f"slide.{i:03d}.png").write_bytes(TINY_PNG)
+        return RunResult(
             status_code=self.status_code,
             logs="ok\n",
             container_id="fake",

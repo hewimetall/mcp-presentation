@@ -40,8 +40,9 @@
 | `set_active_workspace` | bind session → workspace |
 | `save_presentation_ir` | validate + write `presentation.ir.json` |
 | `commit_workspace` | gix commit of listed paths |
-| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` |
+| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
 | `get_build_status` | poll task |
+| `get_slide_image` | PNG одного **готового** слайда; без сборки (после pdf/web) |
 | `deploy_presentation` | enqueue local deploy |
 
 ## Task statuses
@@ -67,8 +68,24 @@
 | `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` |
 | `web` | `mcp-presentation/web-builder:latest` | `web` |
 | `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
+| `slide-image` | `mcp-presentation/web-builder:latest` | `slide-image` |
 
 See [`infra/README.md`](../infra/README.md).
+
+## Build engines (library)
+
+Web only:
+
+| Function | Target | Artifact + slides |
+|----------|--------|-------------------|
+| `build_web` | `web` | `dist/` + `out/slides/` |
+| `build_web_pdf` | `web-pdf` | `out/web.pdf` + `out/slides/` |
+| `build_slide_images` | `slide-image` | `out/slides/` only |
+
+**PDF** (worker): `out/main.pdf` + `out/slides/` via `pdftoppm` inside latex-builder.
+
+Every `pdf` / `web` / `web-pdf` rebuild **clears and rewrites** `out/slides/slide.NNN.png`.
+MCP `get_slide_image` only reads those files.
 
 ## Build worker
 
@@ -76,9 +93,8 @@ After enqueue, `wake_worker` starts a daemon that:
 
 1. `claim_next`
 2. validates IR (if present)
-3. compiles IR → Beamer / Marp when needed
-4. runs the image **or** local deploy adapter
-5. writes `done` / `error`
+3. web → `run_web_target` / pdf → latex path / deploy → local copy
+4. writes `done` / `error`
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).
 

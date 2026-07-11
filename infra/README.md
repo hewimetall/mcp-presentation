@@ -48,9 +48,10 @@ WORKSPACE=$PWD/workspaces/demo docker compose -f infra/docker/compose.yaml run -
 
 | `build_presentation` target | Image | CMD |
 |-----------------------------|-------|-----|
-| `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` |
-| `web` | `mcp-presentation/web-builder:latest` | `web` |
-| `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
+| `pdf` | `mcp-presentation/latex-builder:latest` | `pdf` → `out/main.pdf` + `out/slides/` (pdftoppm) |
+| `web` | `mcp-presentation/web-builder:latest` | `web` → `dist/` + `out/slides/` |
+| `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` → `out/web.pdf` + `out/slides/` |
+| `slide-image` | `mcp-presentation/web-builder:latest` | images-only → `out/slides/slide.NNN.png` |
 
 Binds: `<abs workspace>:/work` via bollard `ContainerRuntime.run` (ADR-0012).
 

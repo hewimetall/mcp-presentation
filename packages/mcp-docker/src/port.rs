@@ -22,6 +22,8 @@ pub struct RunContainerRequest {
     pub workdir: Option<String>,
     pub env: Vec<String>,
     pub auto_remove: bool,
+    /// Optional `uid:gid` so bind-mounted artifacts are host-writable.
+    pub user: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

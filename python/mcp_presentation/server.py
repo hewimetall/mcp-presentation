@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from fastmcp import FastMCP
+from fastmcp.utilities.types import Image
 
 from mcp_git import GitService
 from mcp_presentation._tasks import TaskStore
@@ -16,6 +17,7 @@ from mcp_presentation.ir_compile import IR_FILENAME, write_ir
 from mcp_presentation.ir_models import validate_ir_obj
 from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
 from mcp_presentation.settings import BUILD_TARGETS
+from mcp_presentation.slide_image import get_slide_png, slide_indices
 from mcp_presentation.types import (
     BuildPresentationResult,
     BuildQueued,
@@ -29,6 +31,7 @@ from mcp_presentation.types import (
     ErrorGit,
     ErrorInvalidId,
     ErrorInvalidIr,
+    ErrorInvalidSlide,
     ErrorInvalidTarget,
     ErrorNoActiveWorkspace,
     ErrorNoArtifact,
@@ -39,6 +42,7 @@ from mcp_presentation.types import (
     ErrorWorkspaceUnavailable,
     GetBuildStatusResult,
     GetSessionResult,
+    GetSlideImageResult,
     GetWorkspaceResult,
     IrSaved,
     ProjectCreated,
@@ -378,6 +382,45 @@ def get_build_status(task_id: str) -> GetBuildStatusResult:
         missing: ErrorTaskNotFound = {"error": "not_found", "task_id": task_id}
         return missing
     return _task_row(row)
+
+
+@mcp.tool()
+def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
+    """Return PNG for one already-built slide (1-based). Does not build.
+
+    Slide PNGs are written/refreshed by ``build_presentation`` for
+    ``pdf`` / ``web`` / ``web-pdf`` (and optional ``slide-image``).
+    """
+    resolved = _active_workspace(session_id)
+    if isinstance(resolved, dict):
+        return resolved
+    _, ws_d = resolved
+    host_ws = Path(ws_d["path"]).resolve()
+    try:
+        path = get_slide_png(host_ws, slide)
+    except ValueError as exc:
+        bad: ErrorInvalidSlide = {
+            "error": "invalid_slide",
+            "slide": slide,
+            "detail": str(exc),
+            "available": slide_indices(host_ws),
+        }
+        return bad
+    except FileNotFoundError as exc:
+        missing_build: ErrorNoArtifact = {
+            "error": "no_artifact",
+            "detail": str(exc),
+        }
+        return missing_build
+    except LookupError as exc:
+        missing_slide: ErrorInvalidSlide = {
+            "error": "invalid_slide",
+            "slide": slide,
+            "detail": str(exc),
+            "available": slide_indices(host_ws),
+        }
+        return missing_slide
+    return Image(path=str(path), format="png")
 
 
 @mcp.tool()

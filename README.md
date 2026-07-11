@@ -25,9 +25,10 @@ create_session
   → checkout_workspace(session_id, project_id)   # gix worktree + state
   → save_presentation_ir(session_id, ir_json)    # Pydantic validate
   → commit_workspace(session_id, …)
-  → build_presentation(session_id, "pdf"|"web"|"web-pdf")
-  → get_build_status(task_id)                    # queued→running→done|error
-  → deploy_presentation(session_id)              # latest artifact → out/deployed
+  → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # also refreshes out/slides/
+  → get_build_status(task_id)
+  → get_slide_image(session_id, slide=1)         # read PNG only (after build)
+  → deploy_presentation(session_id)
 ```
 
 Пример IR: [`examples/demo/presentation.ir.json`](examples/demo/presentation.ir.json)  

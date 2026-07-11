@@ -19,7 +19,7 @@ impl DockerService {
         })
     }
 
-    #[pyo3(signature = (image, cmd, binds=None, workdir=None, env=None, auto_remove=true))]
+    #[pyo3(signature = (image, cmd, binds=None, workdir=None, env=None, auto_remove=true, user=None))]
     #[allow(clippy::too_many_arguments)]
     fn run<'py>(
         &self,
@@ -30,6 +30,7 @@ impl DockerService {
         workdir: Option<String>,
         env: Option<Vec<String>>,
         auto_remove: bool,
+        user: Option<String>,
     ) -> PyResult<Bound<'py, PyDict>> {
         let req = RunContainerRequest {
             image: image.to_string(),
@@ -38,6 +39,7 @@ impl DockerService {
             workdir,
             env: env.unwrap_or_default(),
             auto_remove,
+            user,
         };
         let res = self
             .inner
