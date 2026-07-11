@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import cast
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from fastmcp.dependencies import Progress
+from fastmcp.server.tasks import TaskConfig
 from fastmcp.utilities.types import Image
 
 from mcp_git import GitService
@@ -18,6 +21,7 @@ from mcp_presentation.ir_models import validate_ir_obj
 from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
 from mcp_presentation.settings import BUILD_TARGETS
 from mcp_presentation.slide_image import get_slide_png, slide_indices
+from mcp_presentation.task_bridge import await_sqlite_task
 from mcp_presentation.types import (
     BuildPresentationResult,
     BuildQueued,
@@ -69,6 +73,8 @@ mcp = FastMCP("mcp-presentation")
 _tasks: TaskStore | None = None
 _state: StateStore | None = None
 _git: GitService | None = None
+_PROGRESS = Progress()
+_BUILD_TASK = TaskConfig(mode="optional", poll_interval=timedelta(seconds=1))
 
 
 def get_tasks() -> TaskStore:
@@ -354,9 +360,8 @@ def commit_workspace(
     return ok
 
 
-@mcp.tool()
-def build_presentation(session_id: str, target: str) -> BuildPresentationResult:
-    """Enqueue a presentation build (pdf|web|web-pdf) for the active workspace."""
+def enqueue_build(session_id: str, target: str) -> BuildPresentationResult:
+    """Submit a build into SQLite TaskStore and wake the BuildWorker."""
     if target not in BUILD_TARGETS:
         bad: ErrorInvalidTarget = {
             "error": "invalid_target",
@@ -372,6 +377,32 @@ def build_presentation(session_id: str, target: str) -> BuildPresentationResult:
     wake_worker(get_tasks())
     queued: BuildQueued = {"task_id": tid, "status": "queued", "workspace": path}
     return queued
+
+
+@mcp.tool(task=_BUILD_TASK)
+async def build_presentation(
+    session_id: str,
+    target: str,
+    ctx: Context | None = None,
+    progress: Progress = _PROGRESS,
+) -> BuildPresentationResult:
+    """Build for the active workspace.
+
+    Without MCP ``task=True``: enqueue into SQLite and return ``{task_id, queued}``.
+    With ``task=True``: wait on that same SQLite row and push status notifications
+    (``notifications/tasks/status`` via Progress) until ``done`` / ``error``.
+    """
+    queued = enqueue_build(session_id, target)
+    if "error" in queued:
+        return queued
+    if ctx is None or not ctx.is_background_task:
+        return queued
+    tid = str(queued["task_id"])
+    await progress.set_total(3)
+    await progress.set_message(f"task_id={tid} status=queued")
+    row = await await_sqlite_task(get_tasks(), tid, progress)
+    await progress.increment(3)
+    return row
 
 
 @mcp.tool()
@@ -423,9 +454,8 @@ def get_slide_image(session_id: str, slide: int) -> Image | GetSlideImageResult:
     return Image(path=str(path), format="png")
 
 
-@mcp.tool()
-def deploy_presentation(session_id: str, artifact: str = "") -> DeployPresentationResult:
-    """Enqueue local deploy of an artifact (or latest successful build)."""
+def enqueue_deploy(session_id: str, artifact: str = "") -> DeployPresentationResult:
+    """Submit a deploy into SQLite TaskStore and wake the BuildWorker."""
     resolved = _active_workspace(session_id)
     if isinstance(resolved, dict):
         return resolved
@@ -458,6 +488,31 @@ def deploy_presentation(session_id: str, artifact: str = "") -> DeployPresentati
         "artifact": art,
     }
     return queued
+
+
+@mcp.tool(task=_BUILD_TASK)
+async def deploy_presentation(
+    session_id: str,
+    artifact: str = "",
+    ctx: Context | None = None,
+    progress: Progress = _PROGRESS,
+) -> DeployPresentationResult:
+    """Deploy an artifact for the active workspace.
+
+    Same contract as ``build_presentation``: immediate call enqueues; MCP
+    ``task=True`` waits on the SQLite task and emits status notifications.
+    """
+    queued = enqueue_deploy(session_id, artifact)
+    if "error" in queued:
+        return queued
+    if ctx is None or not ctx.is_background_task:
+        return queued
+    tid = str(queued["task_id"])
+    await progress.set_total(3)
+    await progress.set_message(f"task_id={tid} status=queued")
+    row = await await_sqlite_task(get_tasks(), tid, progress)
+    await progress.increment(3)
+    return row
 
 
 def main() -> None:
