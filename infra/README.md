@@ -24,6 +24,22 @@ docker build -t mcp-presentation/latex-builder:latest infra/docker/latex
 docker build -t mcp-presentation/web-builder:latest infra/docker/web
 ```
 
+## Release (GHCR)
+
+Тег `v*` запускает [`.github/workflows/release.yml`](../.github/workflows/release.yml):
+сборка обоих образов и push в GHCR + публикация docs (Pages + assets релиза).
+
+```bash
+docker pull ghcr.io/hewimetall/mcp-presentation/latex-builder:latest
+docker pull ghcr.io/hewimetall/mcp-presentation/web-builder:latest
+
+# pin to a release
+docker pull ghcr.io/hewimetall/mcp-presentation/latex-builder:0.1.0
+docker pull ghcr.io/hewimetall/mcp-presentation/web-builder:0.1.0
+```
+
+Для worker: `MCP_LATEX_IMAGE` / `MCP_WEB_IMAGE` → эти GHCR-теги.
+
 ## Run (manual)
 
 ```bash

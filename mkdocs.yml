@@ -1,0 +1,62 @@
+site_name: mcp-presentation
+site_description: MCP server for presentation builds (PDF / web) — architecture & ADRs
+site_url: https://hewimetall.github.io/mcp-presentation/
+repo_url: https://github.com/hewimetall/mcp-presentation
+repo_name: hewimetall/mcp-presentation
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - tables
+  - toc:
+      permalink: true
+
+not_in_nav: |
+  adr/0000-template.md
+
+nav:
+  - Home: index.md
+  - Architecture:
+      - Overview: architecture/OVERVIEW.md
+      - Decisions index: architecture/DECISIONS.md
+  - ADR:
+      - Index: adr/README.md
+      - "0001 Task-based async builds": adr/0001-task-based-async-builds.md
+      - "0002 Embedded SQLite task store": adr/0002-embedded-sqlite-task-store.md
+      - "0003 Reject FastMCP Docket": adr/0003-reject-fastmcp-docket.md
+      - "0004 Rust/PyO3 TaskStore": adr/0004-rust-pyo3-taskstore.md
+      - "0005 Runtime stack": adr/0005-runtime-stack.md
+      - "0006 IR JSON schema": adr/0006-ir-json-schema.md
+      - "0007 Deploy separate target": adr/0007-deploy-separate-target.md
+      - "0008 Docker DooD": adr/0008-docker-dood.md
+      - "0009 Git worktree checkout": adr/0009-git-worktree-checkout.md
+      - "0010 Separate mcp-state package": adr/0010-separate-mcp-state-package.md
+      - "0011 MCP Git gix (no CLI)": adr/0011-mcp-git-gix-no-cli.md
+      - "0012 Docker ports / bollard": adr/0012-docker-ports-adapters-bollard.md

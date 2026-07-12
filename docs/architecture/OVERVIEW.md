@@ -69,7 +69,7 @@
 | `web-pdf` | `mcp-presentation/web-builder:latest` | `web-pdf` |
 | `slide-image` | `mcp-presentation/web-builder:latest` | `slide-image` |
 
-See [`infra/README.md`](../infra/README.md).
+See [`infra/README.md`](https://github.com/hewimetall/mcp-presentation/blob/main/infra/README.md).
 
 ## Build engines (library)
 
