@@ -78,6 +78,15 @@ JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.sch
 
 → [`docs/adr/`](docs/adr/README.md) · overview [`docs/architecture/OVERVIEW.md`](docs/architecture/OVERVIEW.md)
 
+## Release
+
+Тег `v*` → [`.github/workflows/release.yml`](.github/workflows/release.yml):
+Docker-образы в GHCR + docs (GitHub Pages и assets релиза).
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
 ## Dev
 
 ```bash
