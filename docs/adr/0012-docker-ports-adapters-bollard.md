@@ -36,7 +36,7 @@ pub trait ContainerRuntime: Send + Sync {
 
 ### Пакет
 
-**`packages/mcp-docker`** — отдельный maturin/PyO3 пакет (как `mcp-state`, `mcp-git`):
+**`packages/mcp-presentation-docker`** — отдельный maturin/PyO3 пакет (как `mcp-presentation-state`, `mcp-presentation-git`):
 
 | Слой | Содержание |
 |------|------------|

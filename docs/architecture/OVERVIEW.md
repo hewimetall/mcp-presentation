@@ -3,17 +3,16 @@
 ```text
                     ┌─────────────────────────────┐
                     │     FastMCP (Python)        │
-                    │     mcp-presentation        │
+                    │  mcp-presentation-core      │
                     │  + BuildWorker + IR/Pydantic│
                     └──────────────┬──────────────┘
            ┌───────────────────────┼───────────────────────┐
            ▼                       ▼                       ▼
    ┌───────────────┐      ┌───────────────┐      ┌────────────────┐
-   │  mcp-state    │      │  mcp-git      │      │  mcp-docker    │
-   │  StateStore   │      │  GitPort      │      │  ContainerRuntime│
-   │  (rusqlite)   │      │  ↑            │      │  ↑               │
-   └───────────────┘      │  GixAdapter   │      │  BollardAdapter  │
-                          └───────────────┘      └────────────────┘
+   │  mcp-presentation-state │  mcp-presentation-git │  mcp-presentation-docker │
+   │  StateStore             │  GitPort              │  ContainerRuntime        │
+   │  (rusqlite)             │  ↑ GixAdapter         │  ↑ BollardAdapter        │
+   └─────────────────────────┘  └────────────────────┘  └────────────────────────┘
            │                       │                       │
            ▼                       ▼                       ▼
    state/sessions.db      projects/*.git          docker.sock (DooD)
@@ -22,12 +21,12 @@
 
 ## Packages
 
-| Package | Port | Adapter | Persistence / side-effect |
-|---------|------|---------|---------------------------|
-| `mcp-state` | (store API) | rusqlite | `state/sessions.db` |
-| `mcp-presentation` tasks | (store API) | rusqlite | `state/tasks.db` |
-| `mcp-git` | `GitPort` | `GixGitAdapter` | bare + worktrees on disk |
-| `mcp-docker` | `ContainerRuntime` | `BollardDockerAdapter` | container runs via API |
+| Package (PyPI) | Port | Adapter | Persistence / side-effect |
+|----------------|------|---------|---------------------------|
+| `mcp-presentation-core` | FastMCP + TaskStore | rusqlite | `state/tasks.db` |
+| `mcp-presentation-state` | (store API) | rusqlite | `state/sessions.db` |
+| `mcp-presentation-git` | `GitPort` | `GixGitAdapter` | bare + worktrees on disk |
+| `mcp-presentation-docker` | `ContainerRuntime` | `BollardDockerAdapter` | container runs via API |
 
 ## MCP tools (v1)
 

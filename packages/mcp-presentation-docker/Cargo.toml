@@ -1,5 +1,5 @@
 [package]
-name = "mcp-docker"
+name = "mcp-presentation-docker"
 version = "0.1.0"
 edition = "2021"
 description = "ContainerRuntime port with BollardDockerAdapter — no docker CLI"

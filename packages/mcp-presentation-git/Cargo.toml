@@ -1,5 +1,5 @@
 [package]
-name = "mcp-git"
+name = "mcp-presentation-git"
 version = "0.1.0"
 edition = "2021"
 description = "GitPort (hexagonal) with GixGitAdapter — no git CLI, no push"

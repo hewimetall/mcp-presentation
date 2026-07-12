@@ -1,5 +1,5 @@
 [package]
-name = "mcp-presentation-tasks"
+name = "mcp-presentation-core"
 version = "0.1.0"
 edition = "2021"
 description = "Rust TaskStore (rusqlite) exposed to Python via PyO3"

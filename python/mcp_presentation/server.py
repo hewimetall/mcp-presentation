@@ -1,4 +1,4 @@
-"""FastMCP entrypoint — TaskStore + mcp-state + mcp-git + build worker."""
+"""FastMCP entrypoint — TaskStore + mcp-presentation-state/git + build worker."""
 
 from __future__ import annotations
 
@@ -183,14 +183,14 @@ def _active_workspace(
 
 @mcp.tool()
 def create_session(meta: str = "") -> SessionCreated:
-    """Create a persistent session (mcp-state package)."""
+    """Create a persistent session (mcp-presentation-state)."""
     sid = get_state().create_session(meta=meta or None)
     return {"session_id": sid}
 
 
 @mcp.tool()
 def get_session(session_id: str) -> GetSessionResult:
-    """Read session from mcp-state SQLite."""
+    """Read session from mcp-presentation-state SQLite."""
     row = get_state().get_session(session_id)
     if row is None:
         err: ErrorNotFound = {"error": "not_found", "session_id": session_id}
@@ -308,7 +308,7 @@ def checkout_workspace(
 
 @mcp.tool()
 def create_workspace(project_id: str, path: str, ref_name: str = "main") -> WorkspaceCreated:
-    """Register an existing checkout path in mcp-state (no git). Prefer checkout_workspace."""
+    """Register an existing checkout path in mcp-presentation-state (no git). Prefer checkout_workspace."""
     wid = get_state().create_workspace(project_id, path, ref_name=ref_name or None)
     return {"workspace_id": wid, "path": path, "project_id": project_id}
 

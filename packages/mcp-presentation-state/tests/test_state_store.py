@@ -1,4 +1,4 @@
-"""Smoke tests for mcp-state StateStore."""
+"""Smoke tests for mcp-presentation-state StateStore."""
 
 from __future__ import annotations
 

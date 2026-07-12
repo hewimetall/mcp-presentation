@@ -143,8 +143,8 @@ impl GitPort for GixGitAdapter {
 
         let tree_id = write_flat_tree(&repo, &entries)?;
         let author = gix::actor::Signature {
-            name: "mcp-git".into(),
-            email: "mcp-git@localhost".into(),
+            name: "mcp-presentation-git".into(),
+            email: "mcp-presentation-git@localhost".into(),
             time: gix::date::Time::now_local_or_utc(),
         };
         let mut author_buf = gix_date::parse::TimeBuf::default();
@@ -192,8 +192,8 @@ fn seed_empty_main(repo: &gix::Repository) -> Result<(), GitError> {
         .detach();
 
     let author = gix::actor::Signature {
-        name: "mcp-git".into(),
-        email: "mcp-git@localhost".into(),
+        name: "mcp-presentation-git".into(),
+        email: "mcp-presentation-git@localhost".into(),
         time: gix::date::Time::now_local_or_utc(),
     };
     let mut author_buf = gix_date::parse::TimeBuf::default();

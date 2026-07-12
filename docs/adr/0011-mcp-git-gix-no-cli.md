@@ -1,4 +1,4 @@
-# ADR-0011: Separate mcp-git package (gix, no CLI, no push)
+# ADR-0011: Separate mcp-presentation-git package (gix, no CLI, no push)
 
 - Status: Accepted
 - Date: 2026-07-11
@@ -11,7 +11,7 @@
 
 Нужен git-слой для bare + worktree + commit **без** вызова команды `git`.
 Push не нужен (некуда пушить в v1).
-Как и `mcp-state` — **отдельный пакет**.
+Как и `mcp-presentation-state` — **отдельный пакет**.
 
 Кандидаты:
 
@@ -24,7 +24,7 @@ Push не нужен (некуда пушить в v1).
 
 ## Decision
 
-1. Пакет **`packages/mcp-git`** (maturin / PyO3).
+1. Пакет **`packages/mcp-presentation-git`** (maturin / PyO3; ранее `mcp-git`).
 2. Библиотека: **`gix`** (+ `gix-worktree-state` для checkout файлов).
 3. **Ports & Adapters**: порт `GitPort`, адаптер `GixGitAdapter`.
 4. v1 API (только локально):

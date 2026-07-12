@@ -1033,7 +1033,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp-git"
+name = "mcp-presentation-git"
 version = "0.1.0"
 dependencies = [
  "gix",

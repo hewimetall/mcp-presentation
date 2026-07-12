@@ -151,7 +151,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp-presentation-tasks"
+name = "mcp-presentation-core"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
