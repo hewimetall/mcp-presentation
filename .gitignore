@@ -9,6 +9,10 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
 state/
 workspaces/
 projects/
