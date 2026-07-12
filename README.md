@@ -88,6 +88,7 @@ uv sync --extra dev
 (cd packages/mcp-presentation-docker && maturin develop)
 maturin develop
 pytest -q
+make cov-rust   # per-crate cargo-llvm-cov, fail-under 98%
 ```
 
 ### Lint / format
@@ -95,7 +96,9 @@ pytest -q
 ```bash
 make fmt     # ruff + rustfmt
 make lint    # ruff + mypy + rustfmt --check + clippy
-make check   # lint + pytest
+make check   # lint + pytest + cov-rust
+make cov-py  # Python coverage (fail-under 98)
+make cov-rust
 make docker-build   # latex-builder + web-builder images
 ```
 

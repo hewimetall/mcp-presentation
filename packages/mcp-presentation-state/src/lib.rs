@@ -368,3 +368,108 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StateStore>()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::PyAnyMethods;
+    use tempfile::tempdir;
+
+    #[test]
+    fn module_registers_state_store() {
+        Python::attach(|py| {
+            let m = PyModule::new(py, "s").unwrap();
+            _native(&m).unwrap();
+            assert!(m.getattr("StateStore").is_ok());
+        });
+    }
+
+    #[test]
+    fn session_workspace_lifecycle() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("nested").join("sessions.db");
+        Python::attach(|py| {
+            let store = StateStore::new(db.to_str().unwrap()).unwrap();
+            let sid = store.create_session(Some(r#"{"c":1}"#)).unwrap();
+            assert!(store.get_session(py, "nope").unwrap().is_none());
+            let session = store.get_session(py, &sid).unwrap().unwrap();
+            assert!(session
+                .get_item("active_workspace_id")
+                .unwrap()
+                .unwrap()
+                .is_none());
+
+            let sessions = store.list_sessions(py).unwrap();
+            assert_eq!(sessions.len(), 1);
+
+            let wid = store
+                .create_workspace("p1", "/ws1", Some("main"), None)
+                .unwrap();
+            let fixed = store
+                .create_workspace("p1", "/named", Some("main"), Some("named-ws"))
+                .unwrap();
+            assert_eq!(fixed, "named-ws");
+
+            store.set_active_workspace(&sid, &wid).unwrap();
+            let session = store.get_session(py, &sid).unwrap().unwrap();
+            assert_eq!(
+                session
+                    .get_item("active_workspace_id")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                wid
+            );
+
+            let listed = store
+                .list_workspaces(py, Some("p1"), Some("active"))
+                .unwrap();
+            assert_eq!(listed.len(), 2);
+            let all = store.list_workspaces(py, None, None).unwrap();
+            assert_eq!(all.len(), 2);
+
+            store.mark_workspace_removed(&wid).unwrap();
+            let ws = store.get_workspace(py, &wid).unwrap().unwrap();
+            assert_eq!(
+                ws.get_item("status")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "removed"
+            );
+            let session = store.get_session(py, &sid).unwrap().unwrap();
+            assert!(session
+                .get_item("active_workspace_id")
+                .unwrap()
+                .unwrap()
+                .is_none());
+        });
+    }
+
+    #[test]
+    fn set_active_errors() {
+        let dir = tempdir().unwrap();
+        let store = StateStore::new(dir.path().join("s.db").to_str().unwrap()).unwrap();
+        let sid = store.create_session(None).unwrap();
+        assert!(store.set_active_workspace(&sid, "ghost").is_err());
+        let wid = store.create_workspace("p", "/p", None, Some("w1")).unwrap();
+        assert!(store.set_active_workspace("missing-session", &wid).is_err());
+        assert!(store.mark_workspace_removed("ghost").is_err());
+    }
+
+    #[test]
+    fn open_db_fails_when_parent_is_file() {
+        let dir = tempdir().unwrap();
+        let blocker = dir.path().join("not-a-dir");
+        std::fs::write(&blocker, b"x").unwrap();
+        let db = blocker.join("sessions.db");
+        assert!(StateStore::new(db.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn now_secs_ok() {
+        assert!(now_secs() >= 0);
+    }
+}

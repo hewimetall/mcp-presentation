@@ -29,7 +29,7 @@ dev = [
 mcp-presentation = "mcp_presentation.server:main"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["extension-module"]
 python-source = "python"
 module-name = "mcp_presentation._tasks"
 

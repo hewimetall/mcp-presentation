@@ -59,3 +59,33 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GitService>()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::{PyAnyMethods, PyModule};
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn py_git_service_roundtrip() {
+        let dir = tempdir().unwrap();
+        Python::attach(|py| {
+            let m = PyModule::new(py, "g").unwrap();
+            _native(&m).unwrap();
+            assert!(m.getattr("GitService").is_ok());
+
+            let git = GitService::new();
+            let bare = git
+                .init_bare(dir.path().join("p.git").to_str().unwrap())
+                .unwrap();
+            let wt = git
+                .add_worktree(&bare, dir.path().join("wt").to_str().unwrap(), "main")
+                .unwrap();
+            fs::write(PathBuf::from(&wt).join("a.txt"), b"x").unwrap();
+            let cid = git.commit(&wt, "msg", Some(vec!["a.txt".into()])).unwrap();
+            assert!(cid.len() >= 7);
+            assert!(git.commit(&wt, "msg", None).is_err());
+        });
+    }
+}
