@@ -1,12 +1,12 @@
 # Lint / format helpers for Python (ruff, mypy) and Rust (fmt, clippy).
 # Usage: make lint | make fmt | make check
 
-RUST_CRATES := . packages/mcp-state packages/mcp-git packages/mcp-docker
+RUST_CRATES := . packages/mcp-presentation-state packages/mcp-presentation-git packages/mcp-presentation-docker
 
 LATEX_IMAGE := mcp-presentation/latex-builder:latest
 WEB_IMAGE := mcp-presentation/web-builder:latest
 
-.PHONY: fmt fmt-py fmt-rust lint lint-py lint-rust check test docker-build docker-build-latex docker-build-web
+.PHONY: fmt fmt-py fmt-rust lint lint-py lint-rust check test test-py cov-py cov-rust docker-build docker-build-latex docker-build-web
 
 fmt: fmt-py fmt-rust
 
@@ -32,13 +32,21 @@ lint-rust:
 		echo "==> rustfmt --check $$d"; \
 		(cd $$d && cargo fmt -- --check); \
 		echo "==> clippy $$d"; \
-		(cd $$d && cargo clippy --all-targets -- -D warnings); \
+		(cd $$d && cargo clippy --all-targets --no-default-features -- -D warnings); \
 	done
 
-check: lint test
+check: lint test cov-rust
 
-test:
-	pytest -q
+test: test-py
+
+test-py:
+	pytest -q --ignore=tests/test_docker_e2e.py
+
+cov-py:
+	pytest -q --ignore=tests/test_docker_e2e.py
+
+cov-rust:
+	./scripts/rust-coverage.sh
 
 docker-build: docker-build-latex docker-build-web
 

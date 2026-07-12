@@ -15,8 +15,8 @@
 | [0007](0007-deploy-separate-target.md) | D18 | Accepted | Deploy — отдельный target |
 | [0008](0008-docker-dood.md) | D19 | Accepted | Docker DooD (default) |
 | [0009](0009-git-worktree-checkout.md) | D20 | Superseded | Git worktree (→ ADR-0011) |
-| [0010](0010-separate-mcp-state-package.md) | D21 | Accepted | Отдельный пакет `mcp-state` (sessions/workspaces) |
-| [0011](0011-mcp-git-gix-no-cli.md) | D22 | Accepted | `mcp-git`: gix, bare/worktree/commit, без CLI/push |
+| [0010](0010-separate-mcp-state-package.md) | D21 | Accepted | Отдельный пакет `mcp-presentation-state` (sessions/workspaces) |
+| [0011](0011-mcp-git-gix-no-cli.md) | D22 | Accepted | `mcp-presentation-git`: gix, bare/worktree/commit, без CLI/push |
 | [0012](0012-docker-ports-adapters-bollard.md) | D23 | Accepted | Docker: bollard + ports & adapters |
 
 ## Как добавить ADR

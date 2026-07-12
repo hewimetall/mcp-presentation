@@ -20,7 +20,7 @@ git --git-dir=projects/<id>.git worktree add workspaces/<ws_id> <ref>
 
 ## Update
 
-Реализация **без CLI**: пакет `mcp-git` + **gix** (ADR-0011).
+Реализация **без CLI**: пакет `mcp-presentation-git` + **gix** (ADR-0011).
 Семантика worktree сохраняется; меняется механизм.
 
 ## Alternatives considered

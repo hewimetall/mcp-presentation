@@ -58,11 +58,22 @@ class CheckoutResult(TypedDict):
     ref_name: str
     bare_path: str
     session_id: str
+    note: str
 
 
 class IrSaved(TypedDict):
     path: str
     workspace_id: str
+    rebuild_required: Literal[True]
+    note: str
+
+
+class SlideImageOk(TypedDict):
+    slide: int
+    path: str
+    available: list[int]
+    index_note: str
+    format: Literal["png"]
 
 
 class CommitResult(TypedDict):
@@ -82,6 +93,8 @@ class DeployQueued(TypedDict):
     status: Literal["queued"]
     target: Literal["deploy"]
     artifact: str | None
+    deploy_kind: Literal["local_copy"]
+    note: str
 
 
 class WorkspaceRemoved(TypedDict):
@@ -159,33 +172,56 @@ class ErrorInvalidSlide(TypedDict):
     available: list[int]
 
 
+class ErrorWorkspaceExists(TypedDict):
+    error: Literal["workspace_exists"]
+    workspace_id: str
+    detail: str
+
+
+class ErrorWaitTimeout(TypedDict):
+    error: Literal["wait_timeout"]
+    task_id: str
+    detail: str
+
+
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
 GetWorkspaceResult = WorkspaceRow | ErrorWorkspaceNotFound
 BuildPresentationResult = (
     BuildQueued
+    | TaskRow
     | ErrorInvalidTarget
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
+    | ErrorWaitTimeout
 )
 DeployPresentationResult = (
     DeployQueued
+    | TaskRow
     | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
     | ErrorNoArtifact
+    | ErrorWaitTimeout
 )
 GetSlideImageResult = (
-    ErrorSessionNotFound
+    SlideImageOk
+    | ErrorSessionNotFound
     | ErrorNoActiveWorkspace
     | ErrorWorkspaceUnavailable
     | ErrorInvalidSlide
     | ErrorNoArtifact
 )
 CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit
-CheckoutWorkspaceResult = CheckoutResult | ErrorSessionNotFound | ErrorInvalidId | ErrorGit
+CheckoutWorkspaceResult = (
+    CheckoutResult
+    | ErrorSessionNotFound
+    | ErrorInvalidId
+    | ErrorGit
+    | ErrorWorkspaceExists
+)
 SaveIrResult = (
     IrSaved
     | ErrorSessionNotFound

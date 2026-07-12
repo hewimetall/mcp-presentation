@@ -3,7 +3,7 @@ requires = ["maturin>=1.8,<2"]
 build-backend = "maturin"
 
 [project]
-name = "mcp-git"
+name = "mcp-presentation-git"
 version = "0.1.0"
 description = "GitPort + gix adapter (bare, worktree, commit; no CLI, no push)"
 requires-python = ">=3.14"
@@ -14,6 +14,6 @@ dependencies = []
 dev = ["pytest>=8"]
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["extension-module"]
 python-source = "python"
 module-name = "mcp_git._native"

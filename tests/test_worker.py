@@ -69,7 +69,7 @@ class FakeRunner:
                     (slides / f"slide.{i:03d}.png").write_bytes(TINY_PNG)
         return RunResult(
             status_code=self.status_code,
-            logs="ok\n",
+            logs=f"fake-container cmd={cmd[0] if cmd else '?'} ok\n",
             container_id="fake",
         )
 
@@ -105,6 +105,7 @@ def test_worker_pdf_success(tmp_path: Path) -> None:
     assert row["status"] == "done"
     assert row["artifact"] is not None
     assert Path(row["artifact"]).is_file()
+    assert "fake-container" in (row.get("logs") or "")
     assert runner.calls[0][1] == ["pdf"]
     assert worker.process_one() is False
 

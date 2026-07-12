@@ -6,13 +6,18 @@ import json
 import shutil
 import time
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 
 class DeployResult(TypedDict):
     deployed_path: str
     source: str
     manifest: str
+    deploy_kind: Literal["local_copy"]
+    note: str
+
+
+DEPLOY_NOTE = "local filesystem copy under out/deployed/; not a public URL (v1 has no CDN/hosting)"
 
 
 def deploy_local(workspace: Path, artifact: Path) -> DeployResult:
@@ -40,10 +45,14 @@ def deploy_local(workspace: Path, artifact: Path) -> DeployResult:
         "deployed_path": str(deployed.resolve()),
         "deployed_at": int(time.time()),
         "adapter": "local",
+        "deploy_kind": "local_copy",
+        "note": DEPLOY_NOTE,
     }
     manifest.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return {
         "deployed_path": str(deployed.resolve()),
         "source": str(artifact.resolve()),
         "manifest": str(manifest.resolve()),
+        "deploy_kind": "local_copy",
+        "note": DEPLOY_NOTE,
     }

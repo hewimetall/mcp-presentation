@@ -309,3 +309,132 @@ fn _tasks(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TaskStore>()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::PyAnyMethods;
+    use tempfile::tempdir;
+
+    #[test]
+    fn module_registers_task_store() {
+        Python::attach(|py| {
+            let m = PyModule::new(py, "t").unwrap();
+            _tasks(&m).unwrap();
+            assert!(m.getattr("TaskStore").is_ok());
+        });
+    }
+
+    #[test]
+    fn task_store_lifecycle() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("tasks.db");
+        Python::attach(|py| {
+            let store = TaskStore::new(db.to_str().unwrap()).unwrap();
+            let tid = store.submit("s1", "ws/a", "pdf").unwrap();
+            let row = store.get(py, &tid).unwrap().unwrap();
+            assert_eq!(
+                row.get_item("status")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "queued"
+            );
+
+            let claimed = store.claim_next(py).unwrap().unwrap();
+            assert_eq!(
+                claimed
+                    .get_item("task_id")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                tid
+            );
+            assert!(store.claim_next(py).unwrap().is_none());
+
+            store
+                .update(&tid, Some("done"), Some("out/main.pdf"), Some("logs"), None)
+                .unwrap();
+            let done = store.get(py, &tid).unwrap().unwrap();
+            assert_eq!(
+                done.get_item("artifact")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "out/main.pdf"
+            );
+
+            let latest = store.find_latest_done(py, "ws/a", None).unwrap().unwrap();
+            assert_eq!(
+                latest
+                    .get_item("task_id")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                tid
+            );
+            assert!(store
+                .find_latest_done(py, "ws/a", Some("web"))
+                .unwrap()
+                .is_none());
+            assert!(store
+                .find_latest_done(py, "missing", None)
+                .unwrap()
+                .is_none());
+            assert!(store.get(py, "nope").unwrap().is_none());
+        });
+    }
+
+    #[test]
+    fn update_missing_task_errors() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("nested").join("tasks.db");
+        let store = TaskStore::new(db.to_str().unwrap()).unwrap();
+        let err = store.update("missing", Some("done"), None, None, None);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn find_latest_done_with_target_filter() {
+        let dir = tempdir().unwrap();
+        let db = dir.path().join("t.db");
+        Python::attach(|py| {
+            let store = TaskStore::new(db.to_str().unwrap()).unwrap();
+            let tid = store.submit("s", "ws", "web").unwrap();
+            store
+                .update(&tid, Some("done"), Some("dist"), None, Some(""))
+                .unwrap();
+            let hit = store
+                .find_latest_done(py, "ws", Some("web"))
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                hit.get_item("target")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "web"
+            );
+        });
+    }
+
+    #[test]
+    fn open_db_fails_when_parent_is_file() {
+        let dir = tempdir().unwrap();
+        let blocker = dir.path().join("not-a-dir");
+        std::fs::write(&blocker, b"x").unwrap();
+        let db = blocker.join("tasks.db");
+        let err = TaskStore::new(db.to_str().unwrap());
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn now_secs_is_non_negative() {
+        assert!(now_secs() >= 0);
+    }
+}

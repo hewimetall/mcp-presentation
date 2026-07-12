@@ -143,8 +143,8 @@ impl GitPort for GixGitAdapter {
 
         let tree_id = write_flat_tree(&repo, &entries)?;
         let author = gix::actor::Signature {
-            name: "mcp-git".into(),
-            email: "mcp-git@localhost".into(),
+            name: "mcp-presentation-git".into(),
+            email: "mcp-presentation-git@localhost".into(),
             time: gix::date::Time::now_local_or_utc(),
         };
         let mut author_buf = gix_date::parse::TimeBuf::default();
@@ -192,8 +192,8 @@ fn seed_empty_main(repo: &gix::Repository) -> Result<(), GitError> {
         .detach();
 
     let author = gix::actor::Signature {
-        name: "mcp-git".into(),
-        email: "mcp-git@localhost".into(),
+        name: "mcp-presentation-git".into(),
+        email: "mcp-presentation-git@localhost".into(),
         time: gix::date::Time::now_local_or_utc(),
     };
     let mut author_buf = gix_date::parse::TimeBuf::default();
@@ -329,4 +329,172 @@ fn write_flat_tree(
     }
 
     write_node(repo, &root)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::port::GitPort;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn init_worktree_commit_roundtrip() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("demo.git")).unwrap();
+        let wt = git
+            .add_worktree(&bare, &dir.path().join("wt"), "main")
+            .unwrap();
+        fs::write(wt.join("presentation.ir.json"), b"{\"title\":\"T\"}").unwrap();
+        let cid = git
+            .commit(&wt, "add ir", &["presentation.ir.json".into()])
+            .unwrap();
+        assert!(cid.len() >= 7);
+
+        let wt2 = git
+            .add_worktree(&bare, &dir.path().join("wt2"), "refs/heads/main")
+            .unwrap();
+        assert!(wt2.join("presentation.ir.json").is_file());
+    }
+
+    #[test]
+    fn commit_errors_and_nested_paths() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("b.git")).unwrap();
+        let wt = git.add_worktree(&bare, &dir.path().join("wt"), "").unwrap();
+        assert!(git.commit(&wt, "x", &[]).is_err());
+        assert!(git.commit(&wt, "x", &["missing.txt".into()]).is_err());
+
+        fs::create_dir_all(wt.join("sub")).unwrap();
+        fs::write(wt.join("sub/file.txt"), b"hi").unwrap();
+        let cid = git.commit(&wt, "nested", &["sub/file.txt".into()]).unwrap();
+        assert!(!cid.is_empty());
+    }
+
+    #[test]
+    fn reject_non_empty_worktree() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("b.git")).unwrap();
+        let wt = dir.path().join("wt");
+        fs::create_dir_all(&wt).unwrap();
+        fs::write(wt.join("x"), b"1").unwrap();
+        assert!(git.add_worktree(&bare, &wt, "main").is_err());
+    }
+
+    #[test]
+    fn normalize_branch_ref_variants() {
+        assert_eq!(normalize_branch_ref("HEAD"), "refs/heads/main");
+        assert_eq!(normalize_branch_ref(""), "refs/heads/main");
+        assert_eq!(normalize_branch_ref("refs/heads/dev"), "refs/heads/dev");
+        assert_eq!(normalize_branch_ref("feature"), "refs/heads/feature");
+    }
+
+    #[test]
+    fn init_bare_fails_when_parent_is_file() {
+        let dir = tempdir().unwrap();
+        let blocker = dir.path().join("file");
+        fs::write(&blocker, b"x").unwrap();
+        let git = GixGitAdapter::new();
+        assert!(git.init_bare(&blocker.join("repo.git")).is_err());
+    }
+
+    #[test]
+    fn checkout_nested_and_executable_blob() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("b.git")).unwrap();
+        let wt = git
+            .add_worktree(&bare, &dir.path().join("wt"), "main")
+            .unwrap();
+        fs::create_dir_all(wt.join("bin")).unwrap();
+        fs::write(wt.join("bin/tool"), b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(wt.join("bin/tool")).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(wt.join("bin/tool"), perms).unwrap();
+        }
+        // Commit as regular blob then rewrite tree entry as executable via gix for checkout coverage.
+        git.commit(&wt, "tool", &["bin/tool".into()]).unwrap();
+
+        // Build a commit with an executable-mode tree entry and checkout into wt3.
+        let repo = gix::open(&bare).unwrap();
+        let bytes = b"#!/bin/sh\necho hi\n";
+        let blob = repo.write_blob(bytes).unwrap().detach();
+        let mut tree = gix::objs::Tree::empty();
+        tree.entries.push(gix::objs::tree::Entry {
+            mode: gix::objs::tree::EntryKind::BlobExecutable.into(),
+            filename: "run.sh".into(),
+            oid: blob,
+        });
+        let tree_id = repo.write_object(&tree).unwrap().detach();
+        let author = gix::actor::Signature {
+            name: "t".into(),
+            email: "t@t".into(),
+            time: gix::date::Time::now_local_or_utc(),
+        };
+        let mut ab = gix_date::parse::TimeBuf::default();
+        let mut cb = gix_date::parse::TimeBuf::default();
+        let parent = repo.head_id().unwrap().detach();
+        repo.commit_as(
+            author.to_ref(&mut cb),
+            author.to_ref(&mut ab),
+            "refs/heads/main",
+            "exec",
+            tree_id,
+            std::iter::once(parent),
+        )
+        .unwrap();
+
+        let wt3 = git
+            .add_worktree(&bare, &dir.path().join("wt3"), "main")
+            .unwrap();
+        assert!(wt3.join("run.sh").is_file());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(wt3.join("run.sh"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o111, 0o111);
+        }
+    }
+
+    #[test]
+    fn write_flat_tree_skips_empty_path_components() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("b.git")).unwrap();
+        let repo = gix::open(&bare).unwrap();
+        let blob = repo.write_blob(b"x").unwrap().detach();
+        let id = write_flat_tree(&repo, &[("/".into(), blob), ("ok.txt".into(), blob)]).unwrap();
+        let _ = id;
+    }
+
+    #[test]
+    fn checkout_preserves_nested_tree() {
+        let dir = tempdir().unwrap();
+        let git = GixGitAdapter::new();
+        let bare = git.init_bare(&dir.path().join("b.git")).unwrap();
+        let wt = git
+            .add_worktree(&bare, &dir.path().join("wt"), "main")
+            .unwrap();
+        fs::create_dir_all(wt.join("a/b")).unwrap();
+        fs::write(wt.join("a/b/c.txt"), b"nested").unwrap();
+        git.commit(&wt, "nest", &["a/b/c.txt".into()]).unwrap();
+        let wt2 = git
+            .add_worktree(&bare, &dir.path().join("wt-nest"), "main")
+            .unwrap();
+        assert_eq!(fs::read_to_string(wt2.join("a/b/c.txt")).unwrap(), "nested");
+    }
+
+    #[test]
+    fn git_error_display() {
+        assert_eq!(crate::port::GitError::msg("boom").to_string(), "boom");
+    }
 }

@@ -2,20 +2,56 @@
 
 MCP-сервер для сборки презентаций (**PDF** / **web**) с task-based async pipeline.
 
-## Пакеты (ports & adapters)
+## Пакеты (PyPI names)
 
-| Пакет | Port / роль | Adapter | Артефакт |
-|-------|-------------|---------|----------|
-| **`mcp-presentation`** | FastMCP + TaskStore | rusqlite | `state/tasks.db` |
-| **`mcp-state`** | sessions / workspaces | rusqlite | `state/sessions.db` |
-| **`mcp-git`** | `GitPort` | **gix** | bare + worktrees |
-| **`mcp-docker`** | `ContainerRuntime` | **bollard** | Docker Engine API |
+| Пакет | Import | Роль |
+|-------|--------|------|
+| **`mcp-presentation-core`** | `mcp_presentation` | FastMCP server + TaskStore + CLI |
+| **`mcp-presentation-state`** | `mcp_state` | sessions / workspaces (rusqlite) |
+| **`mcp-presentation-git`** | `mcp_git` | GitPort / **gix** |
+| **`mcp-presentation-docker`** | `mcp_docker` | ContainerRuntime / **bollard** |
 
 Стек: **Python 3.14 · FastMCP · Rust/PyO3 · gix · bollard · rusqlite · Pydantic**.
 
 Git v1: `init_bare` / `add_worktree` / `commit` — **без CLI, без push** (ADR-0011).  
 Docker: DooD socket через bollard — **без `docker` CLI** (ADR-0012).  
 Deploy v1: локальный copy в `out/deployed/` (ADR-0007).
+
+## Run with uv tool
+
+From a checkout (builds native extensions via maturin as needed):
+
+```bash
+uv sync
+uv tool run --from . mcp-presentation
+```
+
+After packages are on an index:
+
+```bash
+uv tool run --from mcp-presentation-core mcp-presentation
+# or install once:
+uv tool install mcp-presentation-core
+mcp-presentation
+```
+
+Cursor / stdio `mcp.json` (local editable):
+
+```json
+{
+  "mcpServers": {
+    "mcp-presentation": {
+      "command": "uv",
+      "args": ["tool", "run", "--from", "/absolute/path/to/mcp-presentation", "mcp-presentation"],
+      "env": {
+        "MCP_PRESENTATION_STATE": "/absolute/path/to/data/state",
+        "MCP_PRESENTATION_PROJECTS": "/absolute/path/to/data/projects",
+        "MCP_PRESENTATION_WORKSPACES": "/absolute/path/to/data/workspaces"
+      }
+    }
+  }
+}
+```
 
 ## Happy path (MCP tools)
 
@@ -25,11 +61,15 @@ create_session
   → checkout_workspace(session_id, project_id)   # gix worktree + state
   → save_presentation_ir(session_id, ir_json)    # Pydantic validate
   → commit_workspace(session_id, …)
-  → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # also refreshes out/slides/
-  → get_build_status(task_id)
-  → get_slide_image(session_id, slide=1)         # read PNG only (after build)
-  → deploy_presentation(session_id)
+  → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # waits; refreshes out/slides/
+  → get_slide_image(session_id, slide=1)  # 1=title; JSON: path/available/index_note + Image
+  → deploy_presentation(session_id)      # local_copy under out/deployed/ (not a URL)
 ```
+
+`save_presentation_ir` returns `rebuild_required: true` — slide PNGs stay stale until rebuild.
+`workspace_id` equals the folder name under `workspaces/`.
+Preferred wait UX: tool itself waits (and with MCP `task=True` also pushes status notifications).
+`get_build_status` remains for inspection only.
 
 Пример IR: [`examples/demo/presentation.ir.json`](examples/demo/presentation.ir.json)  
 JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.schema.json)
@@ -42,12 +82,13 @@ JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.sch
 
 ```bash
 uv venv -p 3.14 .venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
-(cd packages/mcp-state && maturin develop)
-(cd packages/mcp-git && maturin develop)
-(cd packages/mcp-docker && maturin develop)
+uv sync --extra dev
+(cd packages/mcp-presentation-state && maturin develop)
+(cd packages/mcp-presentation-git && maturin develop)
+(cd packages/mcp-presentation-docker && maturin develop)
 maturin develop
 pytest -q
+make cov-rust   # per-crate cargo-llvm-cov, fail-under 98%
 ```
 
 ### Lint / format
@@ -55,7 +96,9 @@ pytest -q
 ```bash
 make fmt     # ruff + rustfmt
 make lint    # ruff + mypy + rustfmt --check + clippy
-make check   # lint + pytest
+make check   # lint + pytest + cov-rust
+make cov-py  # Python coverage (fail-under 98)
+make cov-rust
 make docker-build   # latex-builder + web-builder images
 ```
 
@@ -63,8 +106,10 @@ make docker-build   # latex-builder + web-builder images
 
 → [`infra/`](infra/README.md)
 
-`build_presentation` ставит задачу; **BuildWorker** делает `claim_next`, валидирует IR,
-компилирует в `.tex`/`.md` при необходимости, запускает образ через bollard.
+`build_presentation` / `deploy_presentation` ставят задачу в SQLite; при MCP
+`task=True` tool ждёт ту же строку и шлёт `notifications/tasks/status`.
+**BuildWorker** делает `claim_next`, валидирует IR, компилирует в `.tex`/`.md`
+при необходимости, запускает образ через bollard.
 
 Образы: `MCP_LATEX_IMAGE` / `MCP_WEB_IMAGE`.
 

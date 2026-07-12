@@ -21,8 +21,8 @@ build_web_pdf = web.build_web_pdf
 build_slide_images = web.build_slide_images
 
 
-def run_web_target(workspace: Path, target: str, runner: ContainerRunner) -> Path:
-    """Dispatch a web-engine target."""
+def run_web_target(workspace: Path, target: str, runner: ContainerRunner) -> tuple[Path, str]:
+    """Dispatch a web-engine target. Returns (artifact, container_logs)."""
     if target == "web":
         return build_web(workspace, runner)
     if target == "web-pdf":

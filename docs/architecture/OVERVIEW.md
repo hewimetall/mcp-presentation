@@ -3,17 +3,16 @@
 ```text
                     ┌─────────────────────────────┐
                     │     FastMCP (Python)        │
-                    │     mcp-presentation        │
+                    │  mcp-presentation-core      │
                     │  + BuildWorker + IR/Pydantic│
                     └──────────────┬──────────────┘
            ┌───────────────────────┼───────────────────────┐
            ▼                       ▼                       ▼
    ┌───────────────┐      ┌───────────────┐      ┌────────────────┐
-   │  mcp-state    │      │  mcp-git      │      │  mcp-docker    │
-   │  StateStore   │      │  GitPort      │      │  ContainerRuntime│
-   │  (rusqlite)   │      │  ↑            │      │  ↑               │
-   └───────────────┘      │  GixAdapter   │      │  BollardAdapter  │
-                          └───────────────┘      └────────────────┘
+   │  mcp-presentation-state │  mcp-presentation-git │  mcp-presentation-docker │
+   │  StateStore             │  GitPort              │  ContainerRuntime        │
+   │  (rusqlite)             │  ↑ GixAdapter         │  ↑ BollardAdapter        │
+   └─────────────────────────┘  └────────────────────┘  └────────────────────────┘
            │                       │                       │
            ▼                       ▼                       ▼
    state/sessions.db      projects/*.git          docker.sock (DooD)
@@ -22,12 +21,12 @@
 
 ## Packages
 
-| Package | Port | Adapter | Persistence / side-effect |
-|---------|------|---------|---------------------------|
-| `mcp-state` | (store API) | rusqlite | `state/sessions.db` |
-| `mcp-presentation` tasks | (store API) | rusqlite | `state/tasks.db` |
-| `mcp-git` | `GitPort` | `GixGitAdapter` | bare + worktrees on disk |
-| `mcp-docker` | `ContainerRuntime` | `BollardDockerAdapter` | container runs via API |
+| Package (PyPI) | Port | Adapter | Persistence / side-effect |
+|----------------|------|---------|---------------------------|
+| `mcp-presentation-core` | FastMCP + TaskStore | rusqlite | `state/tasks.db` |
+| `mcp-presentation-state` | (store API) | rusqlite | `state/sessions.db` |
+| `mcp-presentation-git` | `GitPort` | `GixGitAdapter` | bare + worktrees on disk |
+| `mcp-presentation-docker` | `ContainerRuntime` | `BollardDockerAdapter` | container runs via API |
 
 ## MCP tools (v1)
 
@@ -40,10 +39,10 @@
 | `set_active_workspace` | bind session → workspace |
 | `save_presentation_ir` | validate + write `presentation.ir.json` |
 | `commit_workspace` | gix commit of listed paths |
-| `build_presentation` | enqueue `pdf` / `web` / `web-pdf` / `slide-image` |
-| `get_build_status` | poll task |
-| `get_slide_image` | PNG одного **готового** слайда; без сборки (после pdf/web) |
-| `deploy_presentation` | enqueue local deploy |
+| `build_presentation` | wait on SQLite task (optional MCP `task=True` notifications) |
+| `get_build_status` | inspect SQLite row (optional) |
+| `get_slide_image` | PNG + structured `{path, available, index_note}` (1=title) |
+| `deploy_presentation` | wait; local_copy under `out/deployed/` (not a URL) |
 
 ## Task statuses
 
@@ -95,6 +94,11 @@ After enqueue, `wake_worker` starts a daemon that:
 2. validates IR (if present)
 3. web → `run_web_target` / pdf → latex path / deploy → local copy
 4. writes `done` / `error`
+
+MCP clients should prefer `call_tool("build_presentation", …, task=True)` then
+`await task.result()` / `on_status_change`. The tool waits on the **same** SQLite
+`task_id` and pushes `notifications/tasks/status` (Progress bridge). Docket is only
+the protocol wait layer — not the durable queue (ADR-0003).
 
 Deploy v1 copies the artifact into `out/deployed/` + `manifest.json` (no CDN).
 

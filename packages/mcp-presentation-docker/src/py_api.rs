@@ -58,3 +58,30 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<DockerService>()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pyo3::types::{PyAnyMethods, PyModule};
+
+    #[test]
+    fn py_docker_service_hello_world() {
+        Python::attach(|py| {
+            let m = PyModule::new(py, "d").unwrap();
+            _native(&m).unwrap();
+            assert!(m.getattr("DockerService").is_ok());
+
+            let svc = DockerService::new().unwrap();
+            let d = svc
+                .run(py, "hello-world", vec![], None, None, None, true, None)
+                .unwrap();
+            let code = d
+                .get_item("status_code")
+                .unwrap()
+                .unwrap()
+                .extract::<i64>()
+                .unwrap();
+            assert_eq!(code, 0);
+        });
+    }
+}

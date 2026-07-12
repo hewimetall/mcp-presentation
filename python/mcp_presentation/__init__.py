@@ -1,4 +1,4 @@
-"""MCP presentation server — FastMCP + Rust TaskStore (+ mcp-state dependency)."""
+"""MCP presentation server — FastMCP + Rust TaskStore (+ mcp-presentation-state)."""
 
 from __future__ import annotations
 

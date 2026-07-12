@@ -3,38 +3,51 @@ requires = ["maturin>=1.8,<2"]
 build-backend = "maturin"
 
 [project]
-name = "mcp-presentation"
+name = "mcp-presentation-core"
 version = "0.1.0"
 description = "MCP server for presentation builds (PDF/web) with Rust task store"
 requires-python = ">=3.14"
 readme = "README.md"
 dependencies = [
-    "fastmcp>=3.4.4",
+    "fastmcp[tasks]>=3.4.4",
     "pydantic>=2.12",
-    "mcp-state",
-    "mcp-git",
-    "mcp-docker",
+    "mcp-presentation-state",
+    "mcp-presentation-git",
+    "mcp-presentation-docker",
 ]
-
-[tool.uv.sources]
-mcp-state = { path = "packages/mcp-state", editable = true }
-mcp-git = { path = "packages/mcp-git", editable = true }
-mcp-docker = { path = "packages/mcp-docker", editable = true }
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-cov>=6",
     "ruff>=0.12",
     "mypy>=1.16",
+    "maturin>=1.8,<2",
 ]
 
 [project.scripts]
 mcp-presentation = "mcp_presentation.server:main"
 
 [tool.maturin]
-features = ["pyo3/extension-module"]
+features = ["extension-module"]
 python-source = "python"
 module-name = "mcp_presentation._tasks"
+
+[tool.uv]
+package = true
+
+[tool.uv.workspace]
+members = [
+    ".",
+    "packages/mcp-presentation-state",
+    "packages/mcp-presentation-git",
+    "packages/mcp-presentation-docker",
+]
+
+[tool.uv.sources]
+mcp-presentation-state = { workspace = true }
+mcp-presentation-git = { workspace = true }
+mcp-presentation-docker = { workspace = true }
 
 # --- Ruff ---
 [tool.ruff]
@@ -63,7 +76,7 @@ quote-style = "double"
 # --- Mypy ---
 [tool.mypy]
 python_version = "3.14"
-mypy_path = "python:packages/mcp-state/python:packages/mcp-git/python:packages/mcp-docker/python"
+mypy_path = "python:packages/mcp-presentation-state/python:packages/mcp-presentation-git/python:packages/mcp-presentation-docker/python"
 packages = ["mcp_presentation", "mcp_state", "mcp_git", "mcp_docker"]
 strict = true
 warn_return_any = true
@@ -82,13 +95,33 @@ module = [
     "mcp_docker._native",
 ]
 ignore_missing_imports = true
+disallow_any_generics = false
 
 # Pydantic BaseModel annotations trip disallow_any_explicit without the plugin.
 [[tool.mypy.overrides]]
 module = ["mcp_presentation.ir_models"]
 disallow_any_explicit = false
 disallow_any_generics = false
+
 [tool.pytest.ini_options]
 markers = [
     "docker: tests that need a Docker daemon and builder images",
 ]
+addopts = [
+    "--cov=mcp_presentation",
+    "--cov-report=term-missing",
+    "--cov-fail-under=98",
+]
+
+[tool.coverage.run]
+branch = false
+source = ["mcp_presentation"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_covered = false
