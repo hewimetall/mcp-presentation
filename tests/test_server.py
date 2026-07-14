@@ -148,3 +148,38 @@ def test_get_slide_image_structured_meta() -> None:
     assert 1 in meta["available"]
     assert "title" in meta["index_note"].lower()
     assert Path(co["path"]).name == co["workspace_id"]
+
+
+def test_get_view_url_after_web_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MCP_PRESENTATION_PUBLIC_BASE", "https://slides.example.com")
+    sid = server.create_session()["session_id"]
+    server.create_project("viewme")
+    co = server.checkout_workspace(sid, "viewme")
+    server.save_presentation_ir(
+        sid,
+        json.dumps({"title": "Deck", "slides": [{"title": "One", "bullets": ["x"]}]}),
+    )
+
+    async def _build() -> None:
+        async with Client(server.mcp) as client:
+            await client.call_tool(
+                "build_presentation",
+                {"session_id": sid, "target": "web"},
+            )
+
+    asyncio.run(_build())
+    got = server.get_view_url(sid)
+    assert "view_url" in got
+    assert got["view_url"] == f"https://slides.example.com/view/{co['workspace_id']}/"
+    assert got["resource_uri"] == f"presentation://{sid}/view"
+    assert (Path(co["path"]) / "dist" / "index.html").is_file()
+
+    async def _resource() -> str:
+        async with Client(server.mcp) as client:
+            contents = await client.read_resource(f"presentation://{sid}/view")
+            first = contents[0]
+            return str(getattr(first, "text", first))
+
+    body = asyncio.run(_resource())
+    assert "view_url" in body
+    assert co["workspace_id"] in body

@@ -60,3 +60,4 @@ nav:
       - "0010 Separate mcp-state package": adr/0010-separate-mcp-state-package.md
       - "0011 MCP Git gix (no CLI)": adr/0011-mcp-git-gix-no-cli.md
       - "0012 Docker ports / bollard": adr/0012-docker-ports-adapters-bollard.md
+      - "0013 Public web view URL": adr/0013-public-web-view-url.md
