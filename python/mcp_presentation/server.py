@@ -15,13 +15,15 @@ from fastmcp.dependencies import Progress
 from fastmcp.server.tasks import TaskConfig
 from fastmcp.tools import ToolResult
 from fastmcp.utilities.types import Image
+from starlette.requests import Request
+from starlette.responses import FileResponse, PlainTextResponse, Response
 
 from mcp_git import GitService
 from mcp_presentation._tasks import TaskStore
 from mcp_presentation.deploy import DEPLOY_NOTE
 from mcp_presentation.ir_compile import IR_FILENAME, write_ir
 from mcp_presentation.ir_models import validate_ir_obj
-from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path
+from mcp_presentation.paths import PROJECTS_DIR, WORKSPACES_DIR, project_bare_path, require_safe_id
 from mcp_presentation.settings import BUILD_TARGETS
 from mcp_presentation.slide_image import SLIDE_INDEX_NOTE, get_slide_png, slide_indices
 from mcp_presentation.task_bridge import await_sqlite_task
@@ -52,6 +54,7 @@ from mcp_presentation.types import (
     GetBuildStatusResult,
     GetSessionResult,
     GetSlideImageResult,
+    GetViewUrlResult,
     GetWorkspaceResult,
     IrSaved,
     ProjectCreated,
@@ -68,6 +71,7 @@ from mcp_presentation.types import (
     WorkspaceRow,
     WorkspacesList,
 )
+from mcp_presentation.view import resolve_web_root, safe_file_under, view_url_for_workspace
 from mcp_presentation.worker import wake_worker
 from mcp_state import StateStore
 
@@ -258,7 +262,7 @@ def checkout_workspace(
 
     wid = workspace_id.strip() or uuid.uuid4().hex[:12]
     try:
-        from mcp_presentation.paths import require_safe_id, workspace_path
+        from mcp_presentation.paths import workspace_path
 
         require_safe_id(wid, kind="workspace_id")
         wt = workspace_path(wid)
@@ -308,7 +312,7 @@ def checkout_workspace(
 
 @mcp.tool()
 def create_workspace(project_id: str, path: str, ref_name: str = "main") -> WorkspaceCreated:
-    """Register an existing checkout path in mcp-presentation-state (no git). Prefer checkout_workspace."""
+    """Register an existing checkout path in state (no git). Prefer checkout_workspace."""
     wid = get_state().create_workspace(project_id, path, ref_name=ref_name or None)
     return {"workspace_id": wid, "path": path, "project_id": project_id}
 
@@ -563,6 +567,7 @@ async def deploy_presentation(
     """Local-copy deploy (not a URL). Waits on the SQLite task until done/error.
 
     With MCP ``task=True``, also emits status notifications.
+    For an openable HTTPS link after a web build, use ``get_view_url``.
     """
     _ = ctx
     queued = enqueue_deploy(session_id, artifact)
@@ -571,7 +576,70 @@ async def deploy_presentation(
     return await _wait_queued_task(str(queued["task_id"]), progress)
 
 
+@mcp.tool()
+def get_view_url(session_id: str) -> GetViewUrlResult:
+    """Return an HTTPS URL to open the built web presentation in a browser.
+
+    Requires ``MCP_PRESENTATION_PUBLIC_BASE`` (Caddy origin) and a web artifact
+    (``dist/index.html`` or deployed copy). See ADR-0013.
+    """
+    resolved = _active_workspace(session_id)
+    if isinstance(resolved, dict):
+        return resolved
+    _, ws_d = resolved
+    return view_url_for_workspace(
+        ws_d["workspace_id"],
+        Path(ws_d["path"]),
+        session_id=session_id,
+    )
+
+
+@mcp.resource(
+    "presentation://{session_id}/view",
+    mime_type="application/json",
+    description=(
+        "Public web view metadata for a session (view_url when PUBLIC_BASE is set). "
+        "Browser-openable HTTPS is view_url; this URI is MCP resources/read only."
+    ),
+)
+def presentation_view_resource(session_id: str) -> str:
+    """MCP Resource: same payload as get_view_url (JSON text)."""
+    result = get_view_url(session_id)
+    return json.dumps(result, indent=2) + "\n"
+
+
+@mcp.custom_route("/view/{workspace_id}/{path:path}", methods=["GET"])
+@mcp.custom_route("/view/{workspace_id}", methods=["GET"])
+async def serve_web_view(request: Request) -> Response:
+    """Serve built web files for browser viewing (HTTP transport only)."""
+    workspace_id = str(request.path_params.get("workspace_id", ""))
+    rel = str(request.path_params.get("path") or "")
+    try:
+        require_safe_id(workspace_id, kind="workspace_id")
+    except ValueError:
+        return PlainTextResponse("invalid workspace_id", status_code=400)
+    row = get_state().get_workspace(workspace_id)
+    if row is None:
+        return PlainTextResponse("workspace not found", status_code=404)
+    ws_d = _workspace_row(row)
+    if ws_d["status"] != "active":
+        return PlainTextResponse("workspace unavailable", status_code=404)
+    root = resolve_web_root(Path(ws_d["path"]))
+    if root is None:
+        return PlainTextResponse("no web artifact (build target=web first)", status_code=404)
+    file_path = safe_file_under(root, rel)
+    if file_path is None:
+        return PlainTextResponse("not found", status_code=404)
+    return FileResponse(file_path)
+
+
 def main() -> None:
+    transport = os.environ.get("MCP_PRESENTATION_TRANSPORT", "stdio").strip().lower()
+    if transport in {"http", "streamable-http", "sse"}:
+        host = os.environ.get("MCP_PRESENTATION_HOST", "0.0.0.0")
+        port = int(os.environ.get("MCP_PRESENTATION_PORT", "8000"))
+        mcp.run(transport="http", host=host, port=port)
+        return
     mcp.run()
 
 

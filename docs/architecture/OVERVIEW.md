@@ -43,6 +43,22 @@
 | `get_build_status` | inspect SQLite row (optional) |
 | `get_slide_image` | PNG + structured `{path, available, index_note}` (1=title) |
 | `deploy_presentation` | wait; local_copy under `out/deployed/` (not a URL) |
+| `get_view_url` | HTTPS `view_url` when `MCP_PRESENTATION_PUBLIC_BASE` is set |
+
+### MCP resources
+
+| URI template | Role |
+|--------------|------|
+| `presentation://{session_id}/view` | JSON metadata (same as `get_view_url`); not a browser URL |
+
+### Public web view (HTTP)
+
+With `MCP_PRESENTATION_TRANSPORT=http` and `MCP_PRESENTATION_PUBLIC_BASE=https://…`:
+
+- `GET /view/{workspace_id}/…` serves `dist/` (or deployed web root)
+- Caddy: `/view/*` → mcp-presentation; `/mcp` → vMCP → mcp-presentation
+
+See ADR-0013.
 
 ## Task statuses
 

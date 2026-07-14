@@ -184,6 +184,26 @@ class ErrorWaitTimeout(TypedDict):
     detail: str
 
 
+class ViewUrlOk(TypedDict):
+    view_url: str
+    workspace_id: str
+    web_root: str
+    public_base: str
+    resource_uri: str
+    note: str
+
+
+class ErrorPublicBaseUnset(TypedDict):
+    error: Literal["public_base_unset"]
+    detail: str
+
+
+class ErrorNoWebArtifact(TypedDict):
+    error: Literal["no_web_artifact"]
+    workspace_id: str
+    detail: str
+
+
 GetSessionResult = SessionRow | ErrorNotFound
 SetActiveWorkspaceResult = SessionRow | ErrorNotFound
 GetBuildStatusResult = TaskRow | ErrorTaskNotFound
@@ -214,13 +234,17 @@ GetSlideImageResult = (
     | ErrorInvalidSlide
     | ErrorNoArtifact
 )
+GetViewUrlResult = (
+    ViewUrlOk
+    | ErrorPublicBaseUnset
+    | ErrorNoWebArtifact
+    | ErrorSessionNotFound
+    | ErrorNoActiveWorkspace
+    | ErrorWorkspaceUnavailable
+)
 CreateProjectResult = ProjectCreated | ErrorInvalidId | ErrorGit
 CheckoutWorkspaceResult = (
-    CheckoutResult
-    | ErrorSessionNotFound
-    | ErrorInvalidId
-    | ErrorGit
-    | ErrorWorkspaceExists
+    CheckoutResult | ErrorSessionNotFound | ErrorInvalidId | ErrorGit | ErrorWorkspaceExists
 )
 SaveIrResult = (
     IrSaved

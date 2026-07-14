@@ -18,6 +18,7 @@
 | [0010](0010-separate-mcp-state-package.md) | D21 | Accepted | Отдельный пакет `mcp-presentation-state` (sessions/workspaces) |
 | [0011](0011-mcp-git-gix-no-cli.md) | D22 | Accepted | `mcp-presentation-git`: gix, bare/worktree/commit, без CLI/push |
 | [0012](0012-docker-ports-adapters-bollard.md) | D23 | Accepted | Docker: bollard + ports & adapters |
+| [0013](0013-public-web-view-url.md) | D24 | Accepted | Public HTTPS view URL (`/view` + resource) |
 
 ## Как добавить ADR
 

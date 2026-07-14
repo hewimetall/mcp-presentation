@@ -63,6 +63,7 @@ create_session
   → commit_workspace(session_id, …)
   → build_presentation(session_id, "pdf"|"web"|"web-pdf")  # waits; refreshes out/slides/
   → get_slide_image(session_id, slide=1)  # 1=title; JSON: path/available/index_note + Image
+  → get_view_url(session_id)             # HTTPS link when PUBLIC_BASE is set (ADR-0013)
   → deploy_presentation(session_id)      # local_copy under out/deployed/ (not a URL)
 ```
 
@@ -70,6 +71,36 @@ create_session
 `workspace_id` equals the folder name under `workspaces/`.
 Preferred wait UX: tool itself waits (and with MCP `task=True` also pushes status notifications).
 `get_build_status` remains for inspection only.
+
+### Public web view URL
+
+MCP **Resources** (`presentation://{session_id}/view`) give agents metadata via `resources/read` —
+they are **not** openable in a browser. For a real link:
+
+```bash
+export MCP_PRESENTATION_TRANSPORT=http
+export MCP_PRESENTATION_HOST=0.0.0.0
+export MCP_PRESENTATION_PORT=8000
+export MCP_PRESENTATION_PUBLIC_BASE=https://slides.example.com
+mcp-presentation
+```
+
+Then `get_view_url` → `https://slides.example.com/view/<workspace_id>/`.
+
+Caddy sketch:
+
+```text
+slides.example.com {
+  handle /view/* {
+    reverse_proxy 127.0.0.1:8000
+  }
+  handle /mcp* {
+    reverse_proxy vmcp:8080   # vMCP → mcp-presentation
+  }
+}
+```
+
+`GET /view/{workspace_id}/…` is a FastMCP custom route on the same HTTP process (ADR-0013).
 
 Пример IR: [`examples/demo/presentation.ir.json`](examples/demo/presentation.ir.json)  
 JSON Schema: [`schemas/presentation.ir.schema.json`](schemas/presentation.ir.schema.json)

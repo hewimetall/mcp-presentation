@@ -178,10 +178,15 @@ def test_save_commit_enqueue_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert server.get_build_status("missing")["error"] == "not_found"
     assert server.get_slide_image("nope", 1)["error"] == "session_not_found"
     assert server.enqueue_deploy("nope")["error"] == "session_not_found"
+    assert server.get_view_url("nope")["error"] == "session_not_found"
 
     sid = server.create_session()["session_id"]
     server.create_project("c1")
     server.checkout_workspace(sid, "c1")
+    monkeypatch.delenv("MCP_PRESENTATION_PUBLIC_BASE", raising=False)
+    assert server.get_view_url(sid)["error"] == "public_base_unset"
+    monkeypatch.setenv("MCP_PRESENTATION_PUBLIC_BASE", "https://x.test")
+    assert server.get_view_url(sid)["error"] == "no_web_artifact"
     server.save_presentation_ir(
         sid, json.dumps({"title": "T", "slides": [{"title": "S", "bullets": ["a"]}]})
     )
@@ -233,7 +238,19 @@ def test_wait_timeout_path(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_main_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    called = {"n": 0}
-    monkeypatch.setattr(server.mcp, "run", lambda: called.__setitem__("n", called["n"] + 1))
+    runs: list[dict[str, Any]] = []
+
+    def capture_run(*_a: Any, **kw: Any) -> None:
+        runs.append(dict(kw))
+
+    monkeypatch.delenv("MCP_PRESENTATION_TRANSPORT", raising=False)
+    monkeypatch.setattr(server.mcp, "run", capture_run)
     server.main()
-    assert called["n"] == 1
+    assert runs == [{}]
+
+    monkeypatch.setenv("MCP_PRESENTATION_TRANSPORT", "http")
+    monkeypatch.setenv("MCP_PRESENTATION_HOST", "127.0.0.1")
+    monkeypatch.setenv("MCP_PRESENTATION_PORT", "9001")
+    runs.clear()
+    server.main()
+    assert runs == [{"transport": "http", "host": "127.0.0.1", "port": 9001}]
